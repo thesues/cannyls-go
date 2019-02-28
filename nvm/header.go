@@ -54,6 +54,17 @@ type StorageHeader struct {
 	DataRegionSize    uint64
 }
 
+func DefaultStorageHeader() *StorageHeader {
+	uuid, _ := uuid.NewV4()
+	return &StorageHeader{
+		MajorVersion:      MAJOR_VERSION,
+		MinorVersion:      MINOR_VERSION,
+		BlockSize:         block.Min(),
+		UUID:              uuid,
+		JournalRegionSize: 1024,
+		DataRegionSize:    4096,
+	}
+}
 func ReadFromFile(f *os.File) (*StorageHeader, error) {
 	return ReadFrom(f)
 }

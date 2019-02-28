@@ -4,7 +4,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
-	"github.com/thesues/cannyls-go/nvm/header"
 	"io"
 	"os"
 )
@@ -18,11 +17,12 @@ type FileNVM struct {
 
 func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	var flags int
+	var f *os.File
+	var err error
 	flags = os.O_CREATE | os.O_RDWR
 
 	//use O_DIRECT to open the file
-	f, err := OpenFile(path, flags, 0755)
-	if err != nil {
+	if f, err = OpenFile(path, flags, 0755); err != nil {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 
@@ -50,18 +50,18 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 
 }
 
-func Open(path string) (*FileNVM, error) {
-	f, err := OpenFile(path, os.O_RDWR, 0755)
-	if err != nil {
+func Open(path string) (nvm *FileNVM, err error) {
+	var f *os.File
+	var header *StorageHeader
+	if f, err = OpenFile(path, os.O_RDWR, 0755); err != nil {
 		return nil, err
 	}
-	/*
-		header, err := storageheader.ReadFromFile(f)
-		if err != nil {
-			return nil, err
-		}
-		capacity := header.StorageSize()
-	*/
+
+	if header, err = ReadFromFile(f); err != nil {
+		return nil, err
+	}
+
+	capacity := header.StorageSize()
 
 	return &FileNVM{
 		file:            f,
@@ -106,7 +106,7 @@ func (nvm *FileNVM) Split(position uint64) (sp1 *FileNVM, sp2 *FileNVM, err erro
 	return leftNVM, rightNVM, nil
 }
 
-func (self *FileNVM) Seek(offset int64, whence int) (int64, error) {
+func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 	if !block.Min().IsAligned(uint64(offset)) {
 		return offset, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d", offset)
 	}
@@ -117,24 +117,24 @@ func (self *FileNVM) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekStart:
 		abs = offset
 	case io.SeekCurrent:
-		abs = int64(self.Position()) + offset
+		abs = int64(nvm.Position()) + offset
 	case io.SeekEnd:
-		abs = int64(self.Capacity()) + offset
+		abs = int64(nvm.Capacity()) + offset
 	default:
 		return 0, errors.New("bytes.Reader.Seek: invalid whence")
 	}
 
-	if abs > int64(self.Capacity()) || abs < 0 {
+	if abs > int64(nvm.Capacity()) || abs < 0 {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "seek abs is wrong %d", abs)
 	}
 
-	realFilePosition := self.view_start + uint64(abs)
+	realFilePosition := nvm.view_start + uint64(abs)
 
-	self.cursor_position = realFilePosition
+	nvm.cursor_position = realFilePosition
 	return offset, nil
 }
 
-func (nvm *FileNVM) Read(buf []byte) (int, error) {
+func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
 	if !block.Min().IsAligned(uint64(bufLen)) {
@@ -145,8 +145,7 @@ func (nvm *FileNVM) Read(buf []byte) (int, error) {
 
 	newPosition := nvm.cursor_position + len
 
-	n, err := nvm.file.ReadAt(buf[:len], int64(nvm.cursor_position))
-	if err != nil {
+	if n, err = nvm.file.ReadAt(buf[:len], int64(nvm.cursor_position)); err != nil {
 		return -1, errors.Wrap(err, "FileNVM failed to read")
 	}
 
@@ -159,7 +158,7 @@ func (nvm *FileNVM) Read(buf []byte) (int, error) {
 	return n, nil
 }
 
-func (nvm *FileNVM) Write(buf []byte) (int, error) {
+func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
 	if !block.Min().IsAligned(uint64(bufLen)) {
@@ -169,8 +168,7 @@ func (nvm *FileNVM) Write(buf []byte) (int, error) {
 	len := min(maxLen, bufLen)
 	newPosition := nvm.cursor_position + len
 
-	n, err := nvm.file.WriteAt(buf[:len], int64(nvm.cursor_position))
-	if err != nil {
+	if n, err = nvm.file.WriteAt(buf[:len], int64(nvm.cursor_position)); err != nil {
 		return -1, errors.Wrap(err, "FileNVM failed to read")
 	}
 

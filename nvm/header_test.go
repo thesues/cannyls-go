@@ -21,8 +21,8 @@ func TestStorageHeader(t *testing.T) {
 	assert.Nil(t, err)
 
 	header := StorageHeader{
-		MajorVersion:      storage.MAJOR_VERSION,
-		MinorVersion:      storage.MINOR_VERSION,
+		MajorVersion:      MAJOR_VERSION,
+		MinorVersion:      MINOR_VERSION,
 		BlockSize:         bs,
 		UUID:              uuid,
 		JournalRegionSize: 1024,
