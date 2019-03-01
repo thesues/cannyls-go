@@ -1,6 +1,8 @@
 package block
 
-import ()
+import (
+	"unsafe"
+)
 
 type AlignedBytes struct {
 	buf   []byte
@@ -8,9 +10,34 @@ type AlignedBytes struct {
 	block BlockSize
 }
 
-func New(size int, blockSize BlockSize) *AlignedBytes {
-	capacity := blockSize.CeilAlign(uint64(size))
+//https://github.com/ncw/directio/blob/master/direct_io.go
+func alignment(block []byte, AlignSize uint16) int {
+	//address % 512
+	return int(uintptr(unsafe.Pointer(&block[0])) & uintptr(AlignSize-1))
+}
+
+func createNewAlignedBuf(size int, blockSize BlockSize) []byte {
+
+	// + 512 for aligning the offset
+	// -1 for floor_aligin in the function Capactiy
+	capacity := blockSize.CeilAlign(uint64(size)) + uint64(blockSize.AsU16()) - 1
+
 	buf := make([]byte, capacity, capacity)
+	a := alignment(buf, blockSize.AsU16())
+	var offset uint16
+	if a != 0 {
+		offset = blockSize.AsU16() - uint16(a)
+	}
+
+	buf = buf[offset:]
+	return buf
+
+}
+
+func NewAlignedBytes(size int, blockSize BlockSize) *AlignedBytes {
+
+	buf := createNewAlignedBuf(size, blockSize)
+
 	return &AlignedBytes{
 		buf:   buf,
 		len:   uint32(size),
@@ -27,7 +54,7 @@ func (ab *AlignedBytes) BlockSize() BlockSize {
 }
 
 func FromBytes(src []byte, blockSize BlockSize) *AlignedBytes {
-	newAlignedBytes := New(len(src), blockSize)
+	newAlignedBytes := NewAlignedBytes(len(src), blockSize)
 	copy(newAlignedBytes.buf, src)
 	return newAlignedBytes
 }
@@ -44,8 +71,11 @@ func (ab *AlignedBytes) AsBytes() []byte {
 func (ab *AlignedBytes) Resize(newLen uint32) {
 	if newLen > uint32(len(ab.buf)) {
 		newCapacity := ab.block.CeilAlign(uint64(newLen))
-		newBuf := make([]byte, newCapacity, newCapacity)
+
+		newBuf := createNewAlignedBuf(int(newCapacity), ab.block)
+
 		copy(newBuf, ab.buf)
+		ab.buf = newBuf
 	}
 	ab.len = newLen
 }

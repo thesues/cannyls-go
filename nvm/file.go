@@ -13,6 +13,7 @@ type FileNVM struct {
 	cursor_position uint64
 	view_start      uint64
 	view_end        uint64
+	splited         bool //splited file is not allowd to call file.Close()
 }
 
 func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
@@ -22,13 +23,17 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	flags = os.O_CREATE | os.O_RDWR
 
 	//use O_DIRECT to open the file
-	if f, err = OpenFile(path, flags, 0755); err != nil {
+	if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 
 	var metadata os.FileInfo
 	if metadata, err = f.Stat(); err != nil {
 		return nil, errors.Wrap(err, "failed to get metadata")
+	}
+
+	if err = lockFileWithExclusiveLock(f); err != nil {
+		return nil, err
 	}
 
 	if metadata.Size() == 0 {
@@ -46,6 +51,7 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		cursor_position: 0,
 		view_start:      0,
 		view_end:        capacity,
+		splited:         false,
 	}, nil
 
 }
@@ -53,7 +59,7 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 func Open(path string) (nvm *FileNVM, err error) {
 	var f *os.File
 	var header *StorageHeader
-	if f, err = OpenFile(path, os.O_RDWR, 0755); err != nil {
+	if f, err = openFileWithDirectIO(path, os.O_RDWR, 0755); err != nil {
 		return nil, err
 	}
 
@@ -63,11 +69,15 @@ func Open(path string) (nvm *FileNVM, err error) {
 
 	capacity := header.StorageSize()
 
+	if err = lockFileWithExclusiveLock(f); err != nil {
+		return nil, err
+	}
 	return &FileNVM{
 		file:            f,
 		cursor_position: 0,
 		view_start:      0,
 		view_end:        capacity,
+		splited:         false,
 	}, nil
 }
 
@@ -94,6 +104,7 @@ func (nvm *FileNVM) Split(position uint64) (sp1 *FileNVM, sp2 *FileNVM, err erro
 		view_start:      nvm.view_start,
 		cursor_position: nvm.view_start,
 		view_end:        nvm.view_start + position,
+		splited:         true,
 	}
 
 	rightNVM := &FileNVM{
@@ -101,6 +112,7 @@ func (nvm *FileNVM) Split(position uint64) (sp1 *FileNVM, sp2 *FileNVM, err erro
 		view_start:      leftNVM.view_end,
 		view_end:        nvm.view_end,
 		cursor_position: leftNVM.view_end,
+		splited:         true,
 	}
 
 	return leftNVM, rightNVM, nil
@@ -145,13 +157,22 @@ func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 
 	newPosition := nvm.cursor_position + len
 
-	if n, err = nvm.file.ReadAt(buf[:len], int64(nvm.cursor_position)); err != nil {
-		return -1, errors.Wrap(err, "FileNVM failed to read")
-	}
-
-	if uint64(n) < len {
+	n, err = nvm.file.ReadAt(buf[:len], int64(nvm.cursor_position))
+	if err == io.EOF {
 		//expand the file
 		nvm.file.Seek(int64(newPosition), io.SeekStart)
+		nvm.cursor_position = newPosition
+		return int(len), nil
+	}
+	if err != nil {
+		return -1, errors.Wrap(err, "FileNVM failed to read")
+	}
+	if n < int(len) {
+		//if uint64(n) < len {
+		//expand the file
+		nvm.file.Seek(int64(newPosition), io.SeekStart)
+		nvm.cursor_position = newPosition
+		return int(len), nil
 	}
 
 	nvm.cursor_position = newPosition
@@ -161,6 +182,7 @@ func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
+
 	if !block.Min().IsAligned(uint64(bufLen)) {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
 	}
@@ -169,7 +191,7 @@ func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 	newPosition := nvm.cursor_position + len
 
 	if n, err = nvm.file.WriteAt(buf[:len], int64(nvm.cursor_position)); err != nil {
-		return -1, errors.Wrap(err, "FileNVM failed to read")
+		return -1, errors.Wrap(err, "FileNVM failed to write")
 	}
 
 	nvm.cursor_position = newPosition
@@ -178,6 +200,13 @@ func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 
 }
 
+func (nvm *FileNVM) Close() error {
+	if !nvm.splited {
+		return nvm.file.Close()
+	} else {
+		return nil
+	}
+}
 func min(x uint64, y uint64) uint64 {
 	if x < y {
 		return x

@@ -102,6 +102,10 @@ func (memory *MemoryNVM) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
+func (memory *MemoryNVM) Close() error {
+	return nil
+}
+
 func blockSize() block.BlockSize {
 	return block.Min()
 }

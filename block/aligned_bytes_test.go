@@ -7,7 +7,7 @@ import (
 
 func TestAlignedBytesNew(t *testing.T) {
 	//new
-	aligned := New(10, Min())
+	aligned := NewAlignedBytes(10, Min())
 	assert.Equal(t, uint32(10), aligned.Len())
 	assert.Equal(t, uint64(512), aligned.Capacity())
 
@@ -21,7 +21,7 @@ func TestAlignedBytesNew(t *testing.T) {
 func TestAlignedBytesAlign(t *testing.T) {
 
 	//align
-	aligned := New(10, Min())
+	aligned := NewAlignedBytes(10, Min())
 	assert.Equal(t, uint32(10), aligned.Len())
 
 	aligned.Align()
@@ -33,7 +33,7 @@ func TestAlignedBytesAlign(t *testing.T) {
 }
 func TestAlignedBytesTruncate(t *testing.T) {
 	//trucate
-	aligned := New(10, Min())
+	aligned := NewAlignedBytes(10, Min())
 	assert.Equal(t, uint32(10), aligned.Len())
 
 	//success
@@ -46,7 +46,7 @@ func TestAlignedBytesTruncate(t *testing.T) {
 
 }
 func TestAlignedBytesResize(t *testing.T) {
-	aligned := New(10, Min())
+	aligned := NewAlignedBytes(10, Min())
 
 	aligned.Resize(100)
 	assert.Equal(t, uint32(100), aligned.Len())

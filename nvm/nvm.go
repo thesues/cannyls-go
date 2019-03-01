@@ -7,6 +7,7 @@ import (
 
 type NonVolatileMemory interface {
 	io.ReadWriteSeeker
+	io.Closer
 	Sync() error
 	Position() uint64
 	Capacity() uint64
