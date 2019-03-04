@@ -1,6 +1,7 @@
 package nvm
 
 import (
+	"bytes"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
@@ -32,18 +33,24 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		return nil, errors.Wrap(err, "failed to get metadata")
 	}
 
-	if err = lockFileWithExclusiveLock(f); err != nil {
-		return nil, err
-	}
-
 	if metadata.Size() == 0 {
 		//TODO prealloc
 	} else {
-		header, err := ReadFromFile(f)
+		//aligned read
+		var buf [512]byte
+		if _, err = f.Read(buf[:]); err != nil {
+			return nil, err
+		}
+		meta := bytes.NewReader(buf[:])
+		header, err := ReadFrom(meta)
 		if err != nil {
 			return nil, err
 		}
 		capacity = header.StorageSize()
+	}
+
+	if err = lockFileWithExclusiveLock(f); err != nil {
+		return nil, err
 	}
 
 	return &FileNVM{
