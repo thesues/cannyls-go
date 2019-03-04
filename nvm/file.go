@@ -57,17 +57,25 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 }
 
 func Open(path string) (nvm *FileNVM, err error) {
-	var f *os.File
+	var f, parsedFile *os.File
 	var header *StorageHeader
-	if f, err = openFileWithDirectIO(path, os.O_RDWR, 0755); err != nil {
+
+	if parsedFile, err = os.OpenFile(path, os.O_RDWR, 07555); err != nil {
 		return nil, err
 	}
-
-	if header, err = ReadFromFile(f); err != nil {
+	//read the first sector
+	if header, err = ReadFromFile(parsedFile); err != nil {
+		parsedFile.Close()
 		return nil, err
 	}
 
 	capacity := header.StorageSize()
+
+	//reopen the file
+	parsedFile.Close()
+	if f, err = openFileWithDirectIO(path, os.O_RDWR, 0755); err != nil {
+		return nil, err
+	}
 
 	if err = lockFileWithExclusiveLock(f); err != nil {
 		return nil, err
