@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"fmt"
 )
 
 // OpenFile is a modified version of os.OpenFile which sets O_DIRECT
@@ -32,7 +33,7 @@ func isDirectIO(val int) bool {
 	return (val & syscall.O_DIRECT) != 0
 }
 
-func isExclusiveLock(path string) bool {
+func isExclusiveLock(path string, flags int) bool {
 	cmdBinary := fmt.Sprintf("/usr/bin/bash -c '/usr/bin/flock -e -n %s -c echo'", path)
 	parts := strings.Fields(cmdBinary)
 	_, err := exec.Command(parts[0], parts[1:]...).Output()

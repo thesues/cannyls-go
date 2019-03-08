@@ -53,6 +53,6 @@ func isDirectIO(val int) bool {
 The following constant comes from
 https://github.com/apple/darwin-xnu/blob/master/bsd/sys/fcntl.h#L133
 */
-func isExclusiveLock(val int) bool {
+func isExclusiveLock(path string, val int) bool {
 	return (val & 0x4000) != 0
 }

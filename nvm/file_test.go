@@ -172,7 +172,7 @@ func TestFileNVMEXLock(t *testing.T) {
 
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
 	assert.Nil(t, err)
-	assert.Equal(t, true, isExclusiveLock(flag))
+	assert.Equal(t, true, isExclusiveLock("foo-dio", flag))
 
 	nvm.Close()
 
