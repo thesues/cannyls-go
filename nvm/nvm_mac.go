@@ -30,3 +30,29 @@ func openFileWithDirectIO(name string, flag int, perm os.FileMode) (file *os.Fil
 func lockFileWithExclusiveLock(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 }
+
+// copy-paste from src/pkg/syscall/zsyscall_linux_amd64.go
+func fcntl(fd int, cmd int, arg int) (val int, err error) {
+	r0, _, e1 := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), uintptr(cmd), uintptr(arg))
+	val = int(r0)
+	if e1 != 0 {
+		err = e1
+	}
+	return
+}
+
+/*
+The following constant comes from
+https://github.com/apple/darwin-xnu/blob/master/bsd/sys/fcntl.h#L162
+*/
+func isDirectIO(val int) bool {
+	return (val & 0x40000) != 0
+}
+
+/*
+The following constant comes from
+https://github.com/apple/darwin-xnu/blob/master/bsd/sys/fcntl.h#L133
+*/
+func isExclusiveLock(val int) bool {
+	return (val & 0x4000) != 0
+}

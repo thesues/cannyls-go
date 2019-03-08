@@ -7,6 +7,7 @@ import (
 	"github.com/thesues/cannyls-go/block"
 	"io"
 	"os"
+	"syscall"
 	"testing"
 )
 
@@ -136,18 +137,44 @@ func TestFileNVMOperations(t *testing.T) {
 	assert.Equal(t, 512, n)
 	assert.Equal(t, array, buf)
 
-	/*
-		left, right, err := nvm.Split(512)
-		assert.Nil(t, err)
-			assert_eq!(left.capacity(), 512);
-			track_io!(left.seek(SeekFrom::Start(0)))?;
-			track_io!(left.read_exact(&mut buf))?;
-			assert_eq!(&buf[..], &[0; 512][..]);
-			assert_eq!(left.position(), 512);
-			assert!(left.read_exact(&mut buf).is_err());
-		assert.Equal(t, uint64(512), left.Capacity())
-		assert.Equal(t, uint64(0), left.Capacity())
-	*/
+	left, right, err := nvm.Split(512)
+	assert.Nil(t, err)
+	assert.Equal(t, uint64(512), left.Capacity())
+	left.Seek(0, io.SeekStart)
+
+	var readBuf [512]byte
+	//left
+	left.Read(readBuf[:])
+	assert.Equal(t, arrayWithValueSize(512, 0), readBuf[:])
+
+	//right
+	assert.Equal(t, uint64(512), right.Capacity())
+	right.Seek(0, io.SeekStart)
+	right.Read(readBuf[:])
+	assert.Equal(t, arrayWithValueSize(512, 1), readBuf[:])
+
+}
+
+func TestFileNVMDirectIO(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio", 1024)
+	defer os.Remove("foo-dio")
+	//
+	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, true, isDirectIO(flag))
+	nvm.Close()
+}
+
+func TestFileNVMEXLock(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio", 1024)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio")
+
+	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, true, isExclusiveLock(flag))
+
+	nvm.Close()
 
 }
 
