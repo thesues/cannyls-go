@@ -2,7 +2,7 @@ package storage
 
 import (
 	"github.com/thesues/cannyls-go/block"
-	"github.com/thesues/cannyls-go/nvm"
+	_ "github.com/thesues/cannyls-go/nvm"
 )
 
 var (
@@ -16,6 +16,19 @@ const (
 	MAX_DATA_REGION_SIZE    uint64 = MAX_JOURNAL_REGION_SIZE * uint64(block.MIN)
 )
 
-func foo() {
-	nvm.FileNVM
+type Storage struct {
+	header nvm.StorageHeader,
+
+
+}
+
+pub struct Storage<N>
+where
+    N: NonVolatileMemory,
+{
+    header: StorageHeader,
+    journal_region: JournalRegion<N>,
+    data_region: DataRegion<N>,
+    lump_index: LumpIndex,
+    metrics: StorageMetrics,
 }

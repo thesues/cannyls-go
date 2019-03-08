@@ -73,9 +73,9 @@ func TestFileNVMSimpleCreate(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.Remove("foo")
 
-	buf := bytes.NewBuffer([]byte{})
+	buf := new(bytes.Buffer)
 	DefaultStorageHeader().WriteTo(buf)
-	//copy
+	//copy memory
 	ab := align(buf.Bytes())
 	_, err = nvm.Write(ab)
 	assert.Nil(t, err)
