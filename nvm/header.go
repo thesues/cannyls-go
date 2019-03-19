@@ -232,7 +232,10 @@ func (self *StorageHeader) WriteHeaderRegionTo(writer io.Writer) (err error) {
 
 func (self *StorageHeader) SplitRegion(nvm NonVolatileMemory) (NonVolatileMemory, NonVolatileMemory) {
 	headEnd := self.RegionSize()
-	_, body := nvm.Split(headEnd)
-	journalNVM, dataNVM := body.Split(self.JournalRegionSize)
+	_, body, err := nvm.Split(headEnd)
+	if err != nil {
+		return nil, nil
+	}
+	journalNVM, dataNVM, err := body.Split(self.JournalRegionSize)
 	return journalNVM, dataNVM
 }

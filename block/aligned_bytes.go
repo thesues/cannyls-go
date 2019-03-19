@@ -5,9 +5,10 @@ import (
 )
 
 type AlignedBytes struct {
-	buf   []byte
-	len   uint32
-	block BlockSize
+	buf    []byte
+	len    uint32
+	block  BlockSize
+	offset uint16
 }
 
 //https://github.com/ncw/directio/blob/master/direct_io.go
@@ -16,7 +17,7 @@ func alignment(block []byte, AlignSize uint16) int {
 	return int(uintptr(unsafe.Pointer(&block[0])) & uintptr(AlignSize-1))
 }
 
-func createNewAlignedBuf(size int, blockSize BlockSize) []byte {
+func createNewAlignedBuf(size int, blockSize BlockSize) (uint16, []byte) {
 
 	// + 512 for aligning the offset
 	// -1 for floor_aligin in the function Capactiy
@@ -29,24 +30,20 @@ func createNewAlignedBuf(size int, blockSize BlockSize) []byte {
 		offset = blockSize.AsU16() - uint16(a)
 	}
 
-	buf = buf[offset:]
-	return buf
+	return offset, buf
 
 }
 
 func NewAlignedBytes(size int, blockSize BlockSize) *AlignedBytes {
 
-	buf := createNewAlignedBuf(size, blockSize)
+	offset, buf := createNewAlignedBuf(size, blockSize)
 
 	return &AlignedBytes{
-		buf:   buf,
-		len:   uint32(size),
-		block: blockSize,
+		buf:    buf,
+		len:    uint32(size),
+		block:  blockSize,
+		offset: offset,
 	}
-}
-
-func (ab *AlignedBytes) Capacity() uint64 {
-	return ab.block.FloorAlign(uint64(len(ab.buf)))
 }
 
 func (ab *AlignedBytes) BlockSize() BlockSize {
@@ -65,17 +62,19 @@ func (ab *AlignedBytes) Align() *AlignedBytes {
 }
 
 func (ab *AlignedBytes) AsBytes() []byte {
-	return ab.buf[:ab.len]
+
+	return ab.buf[ab.offset:ab.len]
 }
 
 func (ab *AlignedBytes) Resize(newLen uint32) {
-	if newLen > uint32(len(ab.buf)) {
-		newCapacity := ab.block.CeilAlign(uint64(newLen))
+	newCapacity := ab.block.CeilAlign(uint64(newLen))
+	if int(newCapacity) > len(ab.buf)-int(ab.offset) {
+		offset, newBuf := createNewAlignedBuf(int(newCapacity), ab.block)
 
-		newBuf := createNewAlignedBuf(int(newCapacity), ab.block)
-
-		copy(newBuf, ab.buf)
+		//only the block size is the same as before
+		copy(newBuf[offset:], ab.AsBytes())
 		ab.buf = newBuf
+		ab.offset = offset
 	}
 	ab.len = newLen
 }
@@ -93,4 +92,8 @@ func (ab *AlignedBytes) Truncate(len uint32) {
 	if len < ab.len {
 		ab.len = len
 	}
+}
+
+func (ab *AlignedBytes) Capacity() uint64 {
+	return ab.block.FloorAlign(uint64(len(ab.buf)))
 }

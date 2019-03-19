@@ -52,39 +52,57 @@ const (
 )
 
 type LumpData struct {
-	inner     []byte
+	Inner     *block.AlignedBytes
 	innerType LumpDataInner
 }
 
+/*
 func NewLumpDataUnaligned(buf []byte) (*LumpData, error) {
 	if len(buf) > LUMP_MAX_SIZE {
-		return nil, errors.Wrapf(internalerror.InvalidInput, "lump data is too big %s", len(buf))
+		return nil, errors.Wrapf(internalerror.InvalidInput, "lump data is too big %d", len(buf))
 	}
 	return &LumpData{
 		inner:     buf,
 		innerType: DataRegionUnaligned,
 	}, nil
 }
+*/
 
+/*
 func NewLumpDataEmbedded(buf []byte) (*LumpData, error) {
 	if len(buf) > MAX_EMBEDDED_SIZE {
-		return nil, errors.Wrapf(internalerror.InvalidInput, "lump data is too big %s", len(buf))
+		return nil, errors.Wrapf(internalerror.InvalidInput, "lump data is too big %d", len(buf))
 	}
 	return &LumpData{
 		inner:     buf,
 		innerType: JournalRegion,
 	}, nil
 }
+*/
 
-//Todo
+//TODO, to be aligned
 func NewLumpDataAligned(size int, blockSize block.BlockSize) *LumpData {
 	ab := block.NewAlignedBytes(size, blockSize)
 	return &LumpData{
-		inner:     ab.AsBytes(),
+		Inner:     ab,
+		innerType: DataRegion,
+	}
+}
+
+func NewLumpDataWithAb(ab *block.AlignedBytes) *LumpData {
+	return &LumpData{
+		Inner:     ab,
 		innerType: DataRegion,
 	}
 }
 
 func (l *LumpData) AsBytes() []byte {
-	return l.inner
+	return l.Inner.AsBytes()
+}
+
+func DefaultLumpData() *LumpData {
+	return &LumpData{
+		Inner:     nil,
+		innerType: DataRegion,
+	}
 }

@@ -13,14 +13,14 @@ type MemoryNVM struct {
 }
 
 func New(size uint64) (*MemoryNVM, error) {
-	if !blockSize().IsAligned(size) {
+	if !block.Min().IsAligned(size) {
 		return nil, internalerror.InvalidInput
 	}
 	return &MemoryNVM{vec: make([]byte, size), position: 0}, nil
 }
 
 func NewFromVec(vec []byte) (*MemoryNVM, error) {
-	if !blockSize().IsAligned(uint64(len(vec))) {
+	if !block.Min().IsAligned(uint64(len(vec))) {
 		return nil, internalerror.InvalidInput
 	}
 
@@ -39,8 +39,8 @@ func (memory *MemoryNVM) Capacity() uint64 {
 	return uint64(len(memory.vec))
 }
 
-func (memory *MemoryNVM) Split(p uint64) (sp1 *MemoryNVM, sp2 *MemoryNVM, err error) {
-	if blockSize().CeilAlign(p) != p {
+func (memory *MemoryNVM) Split(p uint64) (sp1 NonVolatileMemory, sp2 NonVolatileMemory, err error) {
+	if memory.BlockSize().CeilAlign(p) != p {
 		return nil, nil, internalerror.InvalidInput
 	}
 
@@ -58,7 +58,7 @@ func (memory *MemoryNVM) Split(p uint64) (sp1 *MemoryNVM, sp2 *MemoryNVM, err er
 
 func (memory *MemoryNVM) Seek(offset int64, whence int) (int64, error) {
 
-	if !blockSize().IsAligned(uint64(offset)) {
+	if !memory.BlockSize().IsAligned(uint64(offset)) {
 		return -1, internalerror.InvalidInput
 	}
 
@@ -94,7 +94,7 @@ func (memory *MemoryNVM) Read(buf []byte) (n int, err error) {
 }
 
 func (memory *MemoryNVM) Write(p []byte) (n int, err error) {
-	if !blockSize().IsAligned(uint64(len(p))) {
+	if !memory.BlockSize().IsAligned(uint64(len(p))) {
 		return -1, internalerror.InvalidInput
 	}
 	n = copy(memory.vec[memory.position:], p)
@@ -106,6 +106,6 @@ func (memory *MemoryNVM) Close() error {
 	return nil
 }
 
-func blockSize() block.BlockSize {
+func (memory *MemoryNVM) BlockSize() block.BlockSize {
 	return block.Min()
 }

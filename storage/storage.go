@@ -2,7 +2,7 @@ package storage
 
 import (
 	"github.com/thesues/cannyls-go/block"
-	_ "github.com/thesues/cannyls-go/nvm"
+	"github.com/thesues/cannyls-go/nvm"
 )
 
 var (
@@ -17,11 +17,10 @@ const (
 )
 
 type Storage struct {
-	header nvm.StorageHeader,
-
-
+	header nvm.StorageHeader
 }
 
+/*
 pub struct Storage<N>
 where
     N: NonVolatileMemory,
@@ -32,3 +31,4 @@ where
     lump_index: LumpIndex,
     metrics: StorageMetrics,
 }
+*/

@@ -108,7 +108,7 @@ func (nvm *FileNVM) Capacity() uint64 {
 	return nvm.view_end - nvm.view_start
 }
 
-func (nvm *FileNVM) Split(position uint64) (sp1 *FileNVM, sp2 *FileNVM, err error) {
+func (nvm *FileNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolatileMemory, err error) {
 	if block.Min().CeilAlign(uint64(position)) != position {
 		return nil, nil, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d in split", position)
 	}
@@ -222,6 +222,11 @@ func (nvm *FileNVM) Close() error {
 		return nil
 	}
 }
+
+func (nvm *FileNVM) BlockSize() block.BlockSize {
+	return block.Min()
+}
+
 func min(x uint64, y uint64) uint64 {
 	if x < y {
 		return x

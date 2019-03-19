@@ -59,3 +59,11 @@ func TestAlignedBytesResize(t *testing.T) {
 	assert.Equal(t, uint32(1024), aligned.Len())
 
 }
+
+func TestAligneBytesOffset(t *testing.T) {
+	var i = 511
+	for i < 1000 {
+		NewAlignedBytes(i, Min())
+		i += 1
+	}
+}
