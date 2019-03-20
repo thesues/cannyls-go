@@ -16,7 +16,7 @@ func FromU64(hi uint64, lo uint64) LumpId {
 }
 func FromBytes(vec []byte) (LumpId, error) {
 	if len(vec) > 16 {
-		return emptyLump(), errors.Wrap(internalerror.InvalidInput, "from bytes to lumpId failed")
+		return EmptyLump(), errors.Wrap(internalerror.InvalidInput, "from bytes to lumpId failed")
 	}
 	return LumpId{uint128.FromBytes(vec)}, nil
 }
@@ -24,7 +24,7 @@ func FromBytes(vec []byte) (LumpId, error) {
 func FromString(s string) (LumpId, error) {
 	n, err := uint128.FromString(s)
 	if err != nil {
-		return emptyLump(), errors.Wrap(err, "from string to lumpId failed")
+		return EmptyLump(), errors.Wrap(err, "from string to lumpId failed")
 	}
 	return LumpId{n}, nil
 }
@@ -33,7 +33,7 @@ func (left LumpId) Compare(right LumpId) int {
 	return left.Uint128.Compare(right.Uint128)
 }
 
-func emptyLump() LumpId {
+func EmptyLump() LumpId {
 	return LumpId{uint128.FromInts(0, 0)}
 }
 
