@@ -8,6 +8,7 @@ import (
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/storage/allocator"
+	"github.com/thesues/cannyls-go/util"
 	"io"
 )
 
@@ -62,7 +63,7 @@ func (region *DataRegion) Put(data *lump.LumpData) (portion.DataPortion, error) 
 	if padding_len >= uint32(data.Inner.BlockSize().AsU16()) {
 		panic("data region put's align is wrong")
 	}
-	putUint16BigEndian(data.Inner.AsBytes()[trailer_offset:], uint16(padding_len))
+	util.PutUint16BigEndian(data.Inner.AsBytes()[trailer_offset:], uint16(padding_len))
 
 	required_blocks := region.shiftBlockSize(data.Inner.Len())
 	data_portion, err := region.allocator.Allocate(uint16(required_blocks))
@@ -101,28 +102,8 @@ func (region *DataRegion) Get(portion portion.DataPortion) (*lump.LumpData, erro
 		return lump.DefaultLumpData(), err
 	}
 
-	padding_size := uint32(getUint16BigEndion(ab.AsBytes()[ab.Len()-2:]))
+	padding_size := uint32(util.GetUint16BigEndion(ab.AsBytes()[ab.Len()-2:]))
 
 	ab.Resize(ab.Len() - padding_size - LUMP_DATA_TRAILER_SIZE)
 	return lump.NewLumpDataWithAb(ab), nil
-}
-
-//binary helper functions
-func putUint16BigEndian(buf []byte, n uint16) {
-	if len(buf) != 2 {
-		panic("in putUint16BigEndian")
-	}
-	hi := (n & 0xFF00) >> 8
-	lo := (n & 0x00FF)
-	buf[0] = byte(hi)
-	buf[1] = byte(lo)
-}
-
-func getUint16BigEndion(buf []byte) (n uint16) {
-	if len(buf) != 2 {
-		panic("in getUint16BigEndian")
-	}
-	var hi = uint16(buf[0]) << 8
-	var lo = uint16(buf[1])
-	return hi | lo
 }

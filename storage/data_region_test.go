@@ -10,16 +10,6 @@ import (
 	"testing"
 )
 
-func Test_putUint16BigEndian(t *testing.T) {
-	var buf [2]byte
-	putUint16BigEndian(buf[:], 0x1234)
-	assert.Equal(t, byte(0x12), buf[0])
-	assert.Equal(t, byte(0x34), buf[1])
-
-	r := getUint16BigEndion(buf[:])
-	assert.Equal(t, uint16(0x1234), r)
-}
-
 func TestDataRegion(t *testing.T) {
 	var capacity_bytes uint32 = 10 * 1024
 	alloc := allocator.Build(capacity_bytes / uint32(512))

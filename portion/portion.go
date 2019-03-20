@@ -41,13 +41,6 @@ func DefaultDataPortion() DataPortion {
 	}
 }
 
-func NewDataPortion(start uint32, size uint16) DataPortion {
-	return DataPortion{
-		start: address.AddressFromU32(start),
-		len:   size,
-	}
-}
-
 func (p FreePortion) Start() address.Address {
 	n := uint64(p) & address.MAX_ADDRESS
 	return address.AddressFromU64(n)
@@ -117,9 +110,20 @@ func (p DataPortion) Display() string {
 	return fmt.Sprintf("DataPortion: Start: %d, len :%d", p.start, p.len)
 }
 
-func (p DataPortion) FromBlockToBytes(b block.BlockSize) (offset uint64, size uint32) {
+func (p DataPortion) ShiftBlockToBytes(b block.BlockSize) (offset uint64, size uint32) {
 	s := b.AsU16()
 	offset = p.start.AsU64() * uint64(s)
 	size = uint32(p.len * s)
 	return
+}
+
+func (p DataPortion) AsInts() (offset uint64, size uint16) {
+	return p.start.AsU64(), p.len
+}
+
+func NewDataPortion(start uint64, size uint16) DataPortion {
+	return DataPortion{
+		start: address.AddressFromU64(start),
+		len:   size,
+	}
 }
