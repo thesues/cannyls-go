@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+func TestLumpIDFromString(t *testing.T) {
+	_, err := FromString("111")
+	assert.Nil(t, err)
+}
+
 func TestLumpID(t *testing.T) {
 	lid, err := FromString("A1")
 	assert.Nil(t, err)
