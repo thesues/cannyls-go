@@ -1,7 +1,7 @@
 package nvm
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"io"
@@ -59,23 +59,15 @@ func (memory *MemoryNVM) Split(p uint64) (sp1 NonVolatileMemory, sp2 NonVolatile
 func (memory *MemoryNVM) Seek(offset int64, whence int) (int64, error) {
 
 	if !memory.BlockSize().IsAligned(uint64(offset)) {
-		return -1, internalerror.InvalidInput
+		return -1, errors.Wrapf(internalerror.InvalidInput, "block size is not aligned, offset: %d", offset)
 	}
 
-	var abs int64
-	switch whence {
-	case io.SeekStart:
-		abs = offset
-	case io.SeekCurrent:
-		abs = int64(memory.position) + offset
-	case io.SeekEnd:
-		abs = int64(len(memory.vec)) + offset
-	default:
-		return 0, errors.New("bytes.Reader.Seek: invalid whence")
+	abs, err := ConvertToOffset(memory, offset, whence)
+	if err != nil {
+		return 0, err
 	}
-
 	if abs > int64(len(memory.vec)) || abs < 0 {
-		return -1, internalerror.InvalidInput
+		return -1, errors.Wrapf(internalerror.InvalidInput, "seek size is too big abs: %d", abs)
 	}
 
 	memory.position = uint64(abs)
@@ -108,4 +100,9 @@ func (memory *MemoryNVM) Close() error {
 
 func (memory *MemoryNVM) BlockSize() block.BlockSize {
 	return block.Min()
+}
+
+//for local test
+func (memory *MemoryNVM) AsBytes() []byte {
+	return memory.vec
 }

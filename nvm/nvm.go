@@ -1,6 +1,7 @@
 package nvm
 
 import (
+	"errors"
 	"github.com/thesues/cannyls-go/block"
 	"io"
 )
@@ -25,3 +26,18 @@ const (
 	MAX_JOURNAL_REGION_SIZE uint64 = (1 << 40) - 1
 	MAX_DATA_REGION_SIZE    uint64 = MAX_JOURNAL_REGION_SIZE * uint64(block.MIN)
 )
+
+func ConvertToOffset(nvm NonVolatileMemory, offset int64, whence int) (int64, error) {
+	var abs int64
+	switch whence {
+	case io.SeekStart:
+		abs = offset
+	case io.SeekCurrent:
+		abs = int64(nvm.Position()) + offset
+	case io.SeekEnd:
+		abs = int64(nvm.Capacity()) + offset
+	default:
+		return 0, errors.New("bytes.Reader.Seek: invalid whence")
+	}
+	return abs, nil
+}

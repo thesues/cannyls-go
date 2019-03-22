@@ -5,6 +5,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
+	"github.com/thesues/cannyls-go/util"
 	"io"
 	"os"
 )
@@ -139,16 +140,9 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	//abs is relative to the current FileNVM, start from 0
-	var abs int64
-	switch whence {
-	case io.SeekStart:
-		abs = offset
-	case io.SeekCurrent:
-		abs = int64(nvm.Position()) + offset
-	case io.SeekEnd:
-		abs = int64(nvm.Capacity()) + offset
-	default:
-		return 0, errors.New("bytes.Reader.Seek: invalid whence")
+	abs, err := ConvertToOffset(nvm, offset, whence)
+	if err != nil {
+		return 0, err
 	}
 
 	if abs > int64(nvm.Capacity()) || abs < 0 {
@@ -168,7 +162,7 @@ func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
 	}
 
-	len := min(maxLen, bufLen)
+	len := util.Min(maxLen, bufLen)
 
 	newPosition := nvm.cursor_position + len
 
@@ -202,7 +196,7 @@ func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
 	}
 
-	len := min(maxLen, bufLen)
+	len := util.Min(maxLen, bufLen)
 	newPosition := nvm.cursor_position + len
 
 	if n, err = nvm.file.WriteAt(buf[:len], int64(nvm.cursor_position)); err != nil {
@@ -225,12 +219,4 @@ func (nvm *FileNVM) Close() error {
 
 func (nvm *FileNVM) BlockSize() block.BlockSize {
 	return block.Min()
-}
-
-func min(x uint64, y uint64) uint64 {
-	if x < y {
-		return x
-	} else {
-		return y
-	}
 }
