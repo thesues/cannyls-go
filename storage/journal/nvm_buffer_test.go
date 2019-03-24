@@ -3,9 +3,8 @@ package journal
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	//"github.com/thesues/cannyls-go/block"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/nvm"
 	"io"
 	"os"
@@ -109,7 +108,7 @@ func TestJournalNvmBufferAutoFlush1(t *testing.T) {
 	assert.Equal(t, []byte{0, 0, 0}, f.AsBytes()[0:3])
 
 	n, err := buffer.Seek(512, io.SeekStart)
-	assert.Equal(t, 512, n)
+	assert.Equal(t, int64(512), n)
 	assert.Nil(t, err)
 
 	var buf [1]byte

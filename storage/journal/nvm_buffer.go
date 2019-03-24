@@ -1,7 +1,6 @@
 package journal
 
 import (
-	"fmt"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/nvm"
@@ -50,7 +49,6 @@ func (jb *JournalNvmBuffer) Split(p uint64) (nvm.NonVolatileMemory, nvm.NonVolat
 
 func (jb *JournalNvmBuffer) Seek(offset int64, whence int) (int64, error) {
 	abs, err := nvm.ConvertToOffset(jb, offset, whence)
-	fmt.Printf("Convert result %d\n", abs)
 	if err != nil {
 		return -1, err
 	}
@@ -119,6 +117,7 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 		//try to call Write again, this time, the newly created buf would be used
 		if jb.nvm.BlockSize().IsAligned(jb.position) {
 			jb.writeBuf.AlignResize(0)
+			jb.writeBufOffset = jb.position
 		} else {
 			jb.writeBufOffset = jb.nvm.BlockSize().FloorAlign(jb.position)
 			jb.writeBuf.AlignResize(uint32(jb.nvm.BlockSize().AsU16())) //resize to a sector
@@ -167,6 +166,7 @@ func (jb *JournalNvmBuffer) flushWriteBuffer() error {
 		jb.writeBuf.Truncate(newLen)
 		jb.writeBufOffset += uint64(dropLen)
 	}
+	jb.maybeDirty = false
 	return nil
 }
 

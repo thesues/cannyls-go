@@ -12,6 +12,7 @@ import (
 	"io"
 )
 
+//TODO: pre caculate checksum for TAG_GO_FRONT, TAG_END_OF_RECORDS
 const (
 	TAG_END_OF_RECORDS byte = 0
 	TAG_GO_TO_FRONT    byte = 1
@@ -21,10 +22,12 @@ const (
 	TAG_DELETE_RANGE   byte = 6
 )
 const (
-	RECORD_HEADER_SIZE = 1 + 4 // TAG size + Checksum size
-	LUMPID_SIZE        = 16
-	LENGTH_SIZE        = 2
-	PORTION_SIZE       = 5
+	RECORD_HEADER_SIZE   = 1 + 4 // TAG size + Checksum size
+	LUMPID_SIZE          = 16
+	LENGTH_SIZE          = 2
+	PORTION_SIZE         = 5
+	END_OF_RECORDS_SIZE  = 1 + 4 //Tag Size + Checksum size //
+	EMBEDDED_DATA_OFFSET = RECORD_HEADER_SIZE + LUMPID_SIZE + LENGTH_SIZE
 )
 
 type JournalRecord interface {
@@ -56,8 +59,8 @@ type DeleteRange struct {
 }
 
 type JournalEntry struct {
-	start  address.Address
-	record JournalRecord
+	Start  address.Address
+	Record JournalRecord
 }
 
 //
@@ -301,7 +304,7 @@ func ReadFrom(reader io.Reader) (JournalRecord, error) {
 	}
 
 	if checksum != record.CheckSum() {
-		return nil, errors.Wrapf(internalerror.StorageCorrupted, "checksum journal record %d : %d", checksum, record.CheckSum())
+		return nil, errors.Wrapf(internalerror.StorageCorrupted, "checksum disk: %d , mem: %d", checksum, record.CheckSum())
 	}
 
 	return record, nil

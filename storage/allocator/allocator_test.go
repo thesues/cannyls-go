@@ -73,6 +73,6 @@ func TestAllocateRelease(t *testing.T) {
 	alloc.Display()
 }
 
-func fportion(addr uint32, size uint16) portion.DataPortion {
+func fportion(addr uint64, size uint16) portion.DataPortion {
 	return portion.NewDataPortion(addr, size)
 }

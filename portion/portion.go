@@ -41,6 +41,13 @@ func DefaultDataPortion() DataPortion {
 	}
 }
 
+func DefaultJournalPortion() JournalPortion {
+	return JournalPortion{
+		start: address.AddressFromU32(0),
+		len:   0,
+	}
+}
+
 func (p FreePortion) Start() address.Address {
 	n := uint64(p) & address.MAX_ADDRESS
 	return address.AddressFromU64(n)
@@ -100,7 +107,6 @@ func (p EndBasedPortion) Less(than btree.Item) bool {
 
 }
 
-//ignore JournalPortion
 type DataPortion struct {
 	start address.Address
 	len   uint16
@@ -126,4 +132,32 @@ func NewDataPortion(start uint64, size uint16) DataPortion {
 		start: address.AddressFromU64(start),
 		len:   size,
 	}
+}
+
+func (dp DataPortion) Len(b block.BlockSize) uint32 {
+	return uint32(dp.len) * uint32(b.AsU16())
+}
+
+type Portion interface {
+	Len(block.BlockSize) uint32
+}
+
+type JournalPortion struct {
+	start address.Address
+	len   uint16
+}
+
+func NewJournalPortion(start uint64, size uint16) JournalPortion {
+	return JournalPortion{
+		start: address.AddressFromU64(start),
+		len:   size,
+	}
+}
+
+func (jp JournalPortion) Len(b block.BlockSize) uint32 {
+	return uint32(jp.len)
+}
+
+func (jp JournalPortion) Start() uint64 {
+	return jp.start.AsU64()
 }

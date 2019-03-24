@@ -12,4 +12,5 @@ var (
 	InvalidInput      = errors.New("Invalid input")
 	InconsistentState = errors.New("Inconsistent state")
 	Other             = errors.New("Unknow error")
+	NoEntries         = errors.New("NoEntries")
 )
