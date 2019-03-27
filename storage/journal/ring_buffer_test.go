@@ -29,18 +29,20 @@ func TestRingBufferAppend(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		_, _, err := ring.Enqueue(c)
+		_, err := ring.Enqueue(c)
 		assert.Nil(t, err)
 	}
 
-	iter := ring.DequeueIter()
-
 	//fmt.Printf("storage :%v\n", f.AsBytes()[:200])
 
-	entry, err := iter.Next()
 	i := 0
+	var entry JournalEntry
+	var err error
 	var position uint64 = 0
-	for ; err == nil; entry, err = iter.Next() {
+	for {
+		if entry, err = ring.PopFront(); err != nil {
+			break
+		}
 		assert.Equal(t, cases[i], entry.Record)
 		i++
 		assert.Equal(t, position, entry.Start.AsU64())
@@ -55,18 +57,16 @@ func TestRingBufferEmbeded(t *testing.T) {
 	f, _ := nvm.New(1024)
 	bufferedNvm := NewJournalNvmBuffer(f)
 	ring := NewJournalRingBuffer(bufferedNvm, 0)
-	_, _, err := ring.Enqueue(recordPut("0000", 30, 50))
+	_, err := ring.Enqueue(recordPut("0000", 30, 50))
 	assert.Nil(t, err)
-	_, _, err = ring.Enqueue(recordDelete("1111"))
+	_, err = ring.Enqueue(recordDelete("1111"))
 	assert.Nil(t, err)
 
-	id, embedPortion, err := ring.Enqueue(recordEmbed("2222", []byte("foo")))
+	embedPortion, err := ring.Enqueue(recordEmbed("2222", []byte("foo")))
 	assert.Nil(t, err)
-	l, _ := lump.FromString("2222")
-	assert.Equal(t, l, id)
 
-	buf := make([]byte, embedPortion.Len(block.Min()))
-	ring.ReadEmbededBuffer(embedPortion.Start(), buf)
+	buf := make([]byte, embedPortion.SizeOnDisk(block.Min()))
+	ring.ReadEmbededBuffer(embedPortion.Start.AsU64(), buf)
 	assert.Equal(t, []byte("foo"), buf)
 }
 func TestRingBufferRound(t *testing.T) {
@@ -103,9 +103,40 @@ func TestRingBufferFull(t *testing.T) {
 	}
 	assert.Equal(t, uint64(1008), ring.Tail())
 
-	_, _, err := ring.Enqueue(record)
+	_, err := ring.Enqueue(record)
 	fmt.Println(err)
 	assert.Error(t, err)
+
+	ring.unreleasedHead = 511
+	ring.head = 511
+	_, err = ring.Enqueue(record)
+	assert.Error(t, err)
+
+	ring.unreleasedHead = 512
+	ring.head = 512
+	_, err = ring.Enqueue(record)
+	assert.Nil(t, err)
+	assert.Equal(t, uint32(ring.tail), record.ExternalSize())
+
+}
+
+func TestRingBufferTooLargeRecord(t *testing.T) {
+	f, _ := nvm.New(1024)
+	bufferedNvm := NewJournalNvmBuffer(f)
+	ring := NewJournalRingBuffer(bufferedNvm, 0)
+
+	data := make([]byte, 997)
+	record := recordEmbed("1111", data)
+	assert.Equal(t, 1020, int(record.ExternalSize()))
+
+	_, err := ring.Enqueue(record)
+	assert.Error(t, err)
+
+	data = make([]byte, 996)
+	record = recordEmbed("1111", data)
+	assert.Equal(t, 1019, int(record.ExternalSize()))
+	_, err = ring.Enqueue(record)
+	assert.Nil(t, err)
 
 }
 

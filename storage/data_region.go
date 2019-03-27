@@ -63,15 +63,15 @@ func (region *DataRegion) Put(data *lump.LumpData) (portion.DataPortion, error) 
 	if padding_len >= uint32(data.Inner.BlockSize().AsU16()) {
 		panic("data region put's align is wrong")
 	}
-	util.PutUint16BigEndian(data.Inner.AsBytes()[trailer_offset:], uint16(padding_len))
+	util.PutUINT16(data.Inner.AsBytes()[trailer_offset:], uint16(padding_len))
 
 	required_blocks := region.shiftBlockSize(data.Inner.Len())
 	data_portion, err := region.allocator.Allocate(uint16(required_blocks))
 	if err != nil {
-		return portion.DefaultDataPortion(), err
+		return portion.DataPortion{}, err
 	}
 
-	offset, len := data_portion.FromBlockToBytes(region.block_size)
+	offset, len := data_portion.ShiftBlockToBytes(region.block_size)
 	if len != data.Inner.Len() {
 		panic("should be the same in data_region put")
 	}
@@ -90,7 +90,7 @@ func (region *DataRegion) Release(portion portion.DataPortion) {
 }
 
 func (region *DataRegion) Get(portion portion.DataPortion) (*lump.LumpData, error) {
-	offset, len := portion.FromBlockToBytes(region.block_size)
+	offset, len := portion.ShiftBlockToBytes(region.block_size)
 
 	if _, err := region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
 		return lump.DefaultLumpData(), err
@@ -102,7 +102,7 @@ func (region *DataRegion) Get(portion portion.DataPortion) (*lump.LumpData, erro
 		return lump.DefaultLumpData(), err
 	}
 
-	padding_size := uint32(util.GetUint16BigEndion(ab.AsBytes()[ab.Len()-2:]))
+	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
 
 	ab.Resize(ab.Len() - padding_size - LUMP_DATA_TRAILER_SIZE)
 	return lump.NewLumpDataWithAb(ab), nil

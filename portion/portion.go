@@ -27,13 +27,14 @@ func New(offset address.Address, size uint32) FreePortion {
 }
 
 func FromDataPortion(dataPortion DataPortion) FreePortion {
-	return New(dataPortion.start, uint32(dataPortion.len))
+	return New(dataPortion.Start, uint32(dataPortion.Len))
 }
 
 func DefaultFreePortion() FreePortion {
 	return FreePortion(0)
 }
 
+/*
 func DefaultDataPortion() DataPortion {
 	return DataPortion{
 		start: address.AddressFromU32(0),
@@ -43,10 +44,11 @@ func DefaultDataPortion() DataPortion {
 
 func DefaultJournalPortion() JournalPortion {
 	return JournalPortion{
-		start: address.AddressFromU32(0),
-		len:   0,
+		Start: address.AddressFromU32(0),
+		Len:   0,
 	}
 }
+*/
 
 func (p FreePortion) Start() address.Address {
 	n := uint64(p) & address.MAX_ADDRESS
@@ -76,8 +78,8 @@ func (p FreePortion) SlicePart(size uint16) (FreePortion, DataPortion) {
 		panic("can not alloca dataportion from freeportionn")
 	}
 	alloc := DataPortion{
-		start: p.Start(),
-		len:   size,
+		Start: p.Start(),
+		Len:   size,
 	}
 
 	new_start := p.Start().AsU64() + uint64(size)
@@ -108,56 +110,52 @@ func (p EndBasedPortion) Less(than btree.Item) bool {
 }
 
 type DataPortion struct {
-	start address.Address
-	len   uint16
+	Start address.Address
+	Len   uint16
 }
 
 func (p DataPortion) Display() string {
-	return fmt.Sprintf("DataPortion: Start: %d, len :%d", p.start, p.len)
+	return fmt.Sprintf("DataPortion: Start: %d, len :%d", p.Start, p.Len)
 }
 
 func (p DataPortion) ShiftBlockToBytes(b block.BlockSize) (offset uint64, size uint32) {
 	s := b.AsU16()
-	offset = p.start.AsU64() * uint64(s)
-	size = uint32(p.len * s)
+	offset = p.Start.AsU64() * uint64(s)
+	size = uint32(p.Len * s)
 	return
 }
 
 func (p DataPortion) AsInts() (offset uint64, size uint16) {
-	return p.start.AsU64(), p.len
+	return p.Start.AsU64(), p.Len
 }
 
 func NewDataPortion(start uint64, size uint16) DataPortion {
 	return DataPortion{
-		start: address.AddressFromU64(start),
-		len:   size,
+		Start: address.AddressFromU64(start),
+		Len:   size,
 	}
 }
 
-func (dp DataPortion) Len(b block.BlockSize) uint32 {
-	return uint32(dp.len) * uint32(b.AsU16())
+func (dp DataPortion) SizeOnDisk(b block.BlockSize) uint32 {
+	return uint32(dp.Len) * uint32(b.AsU16())
 }
 
 type Portion interface {
-	Len(block.BlockSize) uint32
+	SizeOnDisk(block.BlockSize) uint32
 }
 
 type JournalPortion struct {
-	start address.Address
-	len   uint16
+	Start address.Address
+	Len   uint16
 }
 
 func NewJournalPortion(start uint64, size uint16) JournalPortion {
 	return JournalPortion{
-		start: address.AddressFromU64(start),
-		len:   size,
+		Start: address.AddressFromU64(start),
+		Len:   size,
 	}
 }
 
-func (jp JournalPortion) Len(b block.BlockSize) uint32 {
-	return uint32(jp.len)
-}
-
-func (jp JournalPortion) Start() uint64 {
-	return jp.start.AsU64()
+func (jp JournalPortion) SizeOnDisk(b block.BlockSize) uint32 {
+	return uint32(jp.Len)
 }

@@ -2,6 +2,34 @@ package util
 
 import ()
 
+func PutUINT64(buf []byte, n uint64) {
+	buf[0] = byte(n>>56) & 0xff
+	buf[1] = byte(n>>48) & 0xff
+	buf[2] = byte(n>>40) & 0xff
+	buf[3] = byte(n>>32) & 0xff
+	buf[4] = byte(n>>24) & 0xff
+	buf[5] = byte(n>>16) & 0xff
+	buf[6] = byte(n>>8) & 0xff
+	buf[7] = byte(n & 0xff)
+
+}
+
+func GetUINT64(buf []byte) (n uint64) {
+	if len(buf) != 8 {
+		panic("in GetUint74")
+	}
+	n = 0
+	n |= uint64(buf[0]) << 56
+	n |= uint64(buf[1]) << 48
+	n |= uint64(buf[2]) << 40
+	n |= uint64(buf[3]) << 32
+	n |= uint64(buf[4]) << 24
+	n |= uint64(buf[5]) << 16
+	n |= uint64(buf[6]) << 8
+	n |= uint64(buf[7])
+	return
+}
+
 //binary helper functions
 func PutUINT16(buf []byte, n uint16) {
 	if len(buf) != 2 {

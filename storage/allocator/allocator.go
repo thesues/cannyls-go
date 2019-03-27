@@ -79,7 +79,7 @@ func (alloc *DataPortionAllocator) Allocate(size uint16) (free portion.DataPorti
 	if isAllocated {
 		return free, nil
 	} else {
-		return portion.DefaultDataPortion(),
+		return portion.DataPortion{},
 			errors.Wrap(internalerror.StorageFull, "failed to alloc portion from in-memory allocator")
 	}
 }

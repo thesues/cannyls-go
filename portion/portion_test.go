@@ -16,16 +16,16 @@ func TestFreePortion(t *testing.T) {
 func TestFreePortionAlloca(t *testing.T) {
 	p := New(address.AddressFromU32(100), 150)
 	p, alloc := p.SlicePart(30)
-	assert.Equal(t, address.AddressFromU32(100), alloc.start)
-	assert.Equal(t, uint16(30), alloc.len)
+	assert.Equal(t, address.AddressFromU32(100), alloc.Start)
+	assert.Equal(t, uint16(30), alloc.Len)
 
 	assert.Equal(t, address.AddressFromU32(130), p.Start())
 	assert.Equal(t, uint32(120), p.Len())
 	assert.Equal(t, address.AddressFromU32(250), p.End())
 
 	p, alloc = p.SlicePart(120)
-	assert.Equal(t, address.AddressFromU32(130), alloc.start)
-	assert.Equal(t, uint16(120), alloc.len)
+	assert.Equal(t, address.AddressFromU32(130), alloc.Start)
+	assert.Equal(t, uint16(120), alloc.Len)
 	assert.Equal(t, uint32(0), p.Len())
 	//assert.Equal(t, address.AddressFromU32(250), p.Start()
 

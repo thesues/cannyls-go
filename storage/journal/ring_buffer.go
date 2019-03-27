@@ -3,7 +3,6 @@ package journal
 import (
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
-	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
 	"io"
 )
@@ -64,8 +63,7 @@ func (ring *JournalRingBuffer) Sync() error {
 }
 
 //only return embeded JournalPortion
-func (ring *JournalRingBuffer) Enqueue(record JournalRecord) (id lump.LumpId, jportion portion.JournalPortion, err error) {
-	id = lump.LumpId{}
+func (ring *JournalRingBuffer) Enqueue(record JournalRecord) (jportion portion.JournalPortion, err error) {
 	jportion = portion.JournalPortion{}
 	err = nil
 	//1. check usage
@@ -108,7 +106,6 @@ func (ring *JournalRingBuffer) Enqueue(record JournalRecord) (id lump.LumpId, jp
 	switch r := record.(type) {
 	case EmbedRecord:
 		jportion = portion.NewJournalPortion(preTail+EMBEDDED_DATA_OFFSET, uint16(len(r.Data)))
-		id = r.LumpID
 	}
 	return
 }
@@ -138,6 +135,51 @@ func (ring *JournalRingBuffer) isOverFlow(record JournalRecord) bool {
 	return writeEnd > ring.nvm.Capacity()
 }
 
+//Update the ring.head
+func (ring *JournalRingBuffer) PopFront() (entry JournalEntry, err error) {
+	ring.nvm.Seek(int64(ring.head), io.SeekStart)
+	record, err := ReadFrom(ring.nvm)
+	switch record.(type) {
+	case GoToFront:
+		ring.head = 0
+		ring.nvm.Seek(0, io.SeekStart)
+		return ring.PopFront()
+	case EndOfRecords:
+		//this will not update ring.head
+		return JournalEntry{}, internalerror.NoEntries
+	default:
+		entry = JournalEntry{
+			Start:  address.AddressFromU64(ring.head),
+			Record: record,
+		}
+		ring.head = entry.End()
+		return entry, nil
+	}
+}
+
+//Update the ring.tail
+func (ring *JournalRingBuffer) PopItemForRestore() (entry JournalEntry, err error) {
+	ring.nvm.Seek(int64(ring.tail), io.SeekStart)
+	record, err := ReadFrom(ring.nvm)
+	switch record.(type) {
+	case GoToFront:
+		ring.tail = 0
+		ring.nvm.Seek(0, io.SeekStart)
+		return ring.PopFront()
+	case EndOfRecords:
+		//this will not update ring.tail
+		return JournalEntry{}, internalerror.NoEntries
+	default:
+		entry = JournalEntry{
+			Start:  address.AddressFromU64(ring.tail),
+			Record: record,
+		}
+		ring.tail = entry.End()
+		return entry, nil
+	}
+}
+
+/*
 func (ring *JournalRingBuffer) DequeueIter() *ReadEntries {
 	return NewReadEntries(ring, ring.head)
 }
@@ -149,7 +191,7 @@ type ReadEntries struct {
 	isSecondLap bool
 }
 
-func NewReadEntries(ring *JournalRingBuffer, head uint64) *ReadEntries {
+func newReadEntries(ring *JournalRingBuffer, head uint64) *ReadEntries {
 	return &ReadEntries{
 		//buf:         bufio.NewReader(nvm),
 		ring:        ring,
@@ -198,12 +240,8 @@ func (reader *ReadEntries) Next() (record JournalEntry, err error) {
 			Record: r,
 		}
 		reader.current += uint64(r.ExternalSize())
-		reader.ring.head = reader.current
+		//reader.ring.head = reader.current
 	}
 	return
 }
-
-type DequeueEntries struct {
-	entries *ReadEntries
-	head    uint64
-}
+*/

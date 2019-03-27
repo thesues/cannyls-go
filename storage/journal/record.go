@@ -26,7 +26,7 @@ const (
 	LUMPID_SIZE          = 16
 	LENGTH_SIZE          = 2
 	PORTION_SIZE         = 5
-	END_OF_RECORDS_SIZE  = 1 + 4 //Tag Size + Checksum size //
+	END_OF_RECORDS_SIZE  = 1 + 4 //Tag Size + Checksum size //GO_TO_FRONT and END_OF_RECORD
 	EMBEDDED_DATA_OFFSET = RECORD_HEADER_SIZE + LUMPID_SIZE + LENGTH_SIZE
 )
 
@@ -61,6 +61,10 @@ type DeleteRange struct {
 type JournalEntry struct {
 	Start  address.Address
 	Record JournalRecord
+}
+
+func (entry JournalEntry) End() uint64 {
+	return entry.Start.AsU64() + uint64(entry.Record.ExternalSize())
 }
 
 //
