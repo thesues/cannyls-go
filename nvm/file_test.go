@@ -14,7 +14,7 @@ import (
 func TestFileNVMOpen(t *testing.T) {
 
 	//open an non-exist file
-	nvm, err := Open("foo-test.lusf")
+	nvm, _, err := Open("foo-test.lusf")
 	assert.Error(t, err)
 	assert.Nil(t, nvm)
 }
@@ -40,7 +40,7 @@ func TestFileNVMReopen(t *testing.T) {
 	assert.Nil(t, err)
 
 	//open the file will fail, because the exclusive lock
-	_, err = Open("foo-test.lusf")
+	_, _, err = Open("foo-test.lusf")
 	assert.Error(t, err)
 
 	_, err = CreateIfAbsent("foo-test.lusf", 1024*10)
@@ -48,7 +48,7 @@ func TestFileNVMReopen(t *testing.T) {
 
 	nvm.Close()
 
-	nvm, err = Open("foo-test.lusf")
+	nvm, _, err = Open("foo-test.lusf")
 	assert.Nil(t, err)
 
 	/*

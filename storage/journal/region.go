@@ -1,15 +1,16 @@
 package journal
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/phf/go-queue/queue"
-	_ "github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/lumpindex"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
-	_ "io"
+	"io"
 )
 
 const (
@@ -26,18 +27,35 @@ type JournalRegion struct {
 	gcAfterAppend bool
 }
 
+/*
 func InitialJournalRegion(nvm nvm.NonVolatileMemory) {
 	header := NewJournalHeadRegion(nvm)
 	if err := header.WriteTo(0); err != nil {
 		panic("failed to initialize JournalRegion")
 	}
 	r := EndOfRecords{}
+	ab := block.NewAlignedBytes(512, nvm.BlockSize())
 	if err := r.WriteTo(nvm); err != nil {
 		panic("failed to initialize JournalRegion")
 	}
 }
+*/
 
-func OpenJournalRegion(nvm nvm.NonVolatileMemory, index *lumpindex.LumpIndex) (*JournalRegion, error) {
+//This writer is not direct-io
+func InitialJournalRegion(writer io.Writer, sector block.BlockSize) {
+	//journal header
+	padding := sector.AsU16() - 8
+	var buf = make([]byte, padding)
+	binary.Write(writer, binary.BigEndian, uint64(0))
+	writer.Write(buf)
+
+	r := EndOfRecords{}
+	if err := r.WriteTo(writer); err != nil {
+		panic("failed to initialize JournalRegion")
+	}
+}
+
+func OpenJournalRegion(nvm nvm.NonVolatileMemory) (*JournalRegion, error) {
 
 	blockSize := nvm.BlockSize()
 

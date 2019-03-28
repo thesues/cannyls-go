@@ -20,8 +20,8 @@ type JournalHeaderRegion struct {
 func (headerRegion *JournalHeaderRegion) WriteTo(head uint64) (err error) {
 	sector := headerRegion.nvm.BlockSize()
 	ab := block.NewAlignedBytes(int(sector.AsU16()), sector)
-	ab.Align()
 	buf := ab.AsBytes()
+	ab.Align()
 	util.PutUINT64(buf, head)
 	if _, err = headerRegion.nvm.Seek(0, io.SeekStart); err != nil {
 		return

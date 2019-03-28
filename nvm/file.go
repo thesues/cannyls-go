@@ -1,7 +1,7 @@
 package nvm
 
 import (
-	"bytes"
+	_ "bytes"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
@@ -24,31 +24,37 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	var err error
 	flags = os.O_CREATE | os.O_RDWR
 
-	//use O_DIRECT to open the file
-	if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
+	/*
+		if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
+			return nil, errors.Wrapf(err, "failed to open file %s\n", path)
+		}
+	*/
+	if f, err = os.OpenFile(path, flags, 0755); err != nil {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 
-	var metadata os.FileInfo
-	if metadata, err = f.Stat(); err != nil {
-		return nil, errors.Wrap(err, "failed to get metadata")
-	}
+	/*
+		var metadata os.FileInfo
+		if metadata, err = f.Stat(); err != nil {
+			return nil, errors.Wrap(err, "failed to get metadata")
+		}
 
-	if metadata.Size() == 0 {
-		//TODO prealloc
-	} else {
-		//aligned read
-		var buf [512]byte
-		if _, err = f.Read(buf[:]); err != nil {
-			return nil, err
-		}
-		meta := bytes.NewReader(buf[:])
-		header, err := ReadFrom(meta)
-		if err != nil {
-			return nil, err
-		}
-		capacity = header.StorageSize()
-	}
+			if metadata.Size() == 0 {
+				//TODO prealloc
+			} else {
+				//aligned read
+				var buf [512]byte
+				if _, err = f.Read(buf[:]); err != nil {
+					return nil, err
+				}
+				meta := bytes.NewReader(buf[:])
+				header, err := ReadFrom(meta)
+				if err != nil {
+					return nil, err
+				}
+				capacity = header.StorageSize()
+			}
+	*/
 
 	if err = lockFileWithExclusiveLock(f); err != nil {
 		return nil, err
@@ -64,17 +70,16 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 
 }
 
-func Open(path string) (nvm *FileNVM, err error) {
+func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 	var f, parsedFile *os.File
-	var header *StorageHeader
 
 	if parsedFile, err = os.OpenFile(path, os.O_RDWR, 07555); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	//read the first sector
 	if header, err = ReadFromFile(parsedFile); err != nil {
 		parsedFile.Close()
-		return nil, err
+		return nil, nil, err
 	}
 
 	capacity := header.StorageSize()
@@ -82,19 +87,21 @@ func Open(path string) (nvm *FileNVM, err error) {
 	//reopen the file
 	parsedFile.Close()
 	if f, err = openFileWithDirectIO(path, os.O_RDWR, 0755); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err = lockFileWithExclusiveLock(f); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &FileNVM{
+	err = nil
+	nvm = &FileNVM{
 		file:            f,
 		cursor_position: 0,
 		view_start:      0,
 		view_end:        capacity,
 		splited:         false,
-	}, nil
+	}
+	return
 }
 
 func (self *FileNVM) Sync() error {
