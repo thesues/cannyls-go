@@ -2,7 +2,9 @@ package storage
 
 import (
 	"github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/lumpindex"
 	"github.com/thesues/cannyls-go/nvm"
+	"github.com/thesues/cannyls-go/storage/journal"
 )
 
 var (
@@ -17,7 +19,18 @@ const (
 )
 
 type Storage struct {
-	header nvm.StorageHeader
+	storageHeader nvm.StorageHeader
+	dataRegion    DataRegion
+	journalRegion journal.JournalRegion
+	index         *lumpindex.LumpIndex
+}
+
+func OpenCannylsStorage(path string) *Storage {
+
+}
+
+func CreateCannylsStorage(path string) *Storage {
+
 }
 
 /*

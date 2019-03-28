@@ -179,6 +179,10 @@ func (ring *JournalRingBuffer) PopItemForRestore() (entry JournalEntry, err erro
 	}
 }
 
+func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
+	ring.unreleasedHead = head
+}
+
 /*
 func (ring *JournalRingBuffer) DequeueIter() *ReadEntries {
 	return NewReadEntries(ring, ring.head)
