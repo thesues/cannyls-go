@@ -6,7 +6,7 @@ import (
 )
 
 func TestLumpIDFromString(t *testing.T) {
-	_, err := FromString("111")
+	_, err := FromString("1111")
 	assert.Nil(t, err)
 }
 

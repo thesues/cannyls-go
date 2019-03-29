@@ -8,7 +8,7 @@ import (
 
 func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 	//10M
-	storage, err := CreateCannylsStorage("./tmp.lusf", 10<<20, 0.01)
+	_, err := CreateCannylsStorage("./tmp.lusf", 10<<20, 0.01)
 	defer os.Remove("foo-test.lusf")
 	assert.Nil(t, err)
 }
