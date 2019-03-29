@@ -39,7 +39,8 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	alloc := allocator.New() //TODO//FIXME
+	alloc := allocator.New()
+	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
 	dataRegion := NewDataRegion(alloc, dataNVM)
 
 	return &Storage{
@@ -59,6 +60,8 @@ func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (
 	header := makeHeader(file, 0.01)
 
 	header.WriteHeaderRegionTo(file)
+
+	file.Sync()
 
 	journal.InitialJournalRegion(file, file.BlockSize())
 

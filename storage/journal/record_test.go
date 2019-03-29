@@ -47,7 +47,7 @@ func TestRecordWork(t *testing.T) {
 
 	for _, c := range cases {
 		c.WriteTo(buf)
-		c0, err := ReadFrom(buf)
+		c0, err := ReadRecordFrom(buf)
 		assert.Nil(t, err)
 		assert.Equal(t, c, c0)
 	}
@@ -65,7 +65,7 @@ func TestRecordCheckSum(t *testing.T) {
 	readSlice := make([]byte, l)
 	buf.Read(readSlice)
 	readSlice[6] += 1
-	_, err = ReadFrom(bytes.NewBuffer(readSlice))
+	_, err = ReadRecordFrom(bytes.NewBuffer(readSlice))
 	assert.Error(t, err)
 }
 

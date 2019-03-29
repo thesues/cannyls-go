@@ -18,7 +18,7 @@ FreePortion itself could support upto 24bit len
 */
 
 //panic
-func New(offset address.Address, size uint32) FreePortion {
+func NewFreePortion(offset address.Address, size uint32) FreePortion {
 	if size > (1<<24)-1 {
 		panic("Address for FreePortion is too big")
 	}
@@ -27,7 +27,7 @@ func New(offset address.Address, size uint32) FreePortion {
 }
 
 func FromDataPortion(dataPortion DataPortion) FreePortion {
-	return New(dataPortion.Start, uint32(dataPortion.Len))
+	return NewFreePortion(dataPortion.Start, uint32(dataPortion.Len))
 }
 
 func DefaultFreePortion() FreePortion {
@@ -69,7 +69,7 @@ func (p FreePortion) CheckedExtend(size uint32) (FreePortion, bool) {
 	if p.Len()+size > 0xFFFFFF {
 		return DefaultFreePortion(), false
 	}
-	return New(p.Start(), p.Len()+size), true
+	return NewFreePortion(p.Start(), p.Len()+size), true
 }
 
 //panic
@@ -84,7 +84,7 @@ func (p FreePortion) SlicePart(size uint16) (FreePortion, DataPortion) {
 
 	new_start := p.Start().AsU64() + uint64(size)
 	new_len := p.Len() - uint32(size)
-	newFreePortion := New(address.AddressFromU64(new_start), new_len)
+	newFreePortion := NewFreePortion(address.AddressFromU64(new_start), new_len)
 	return newFreePortion, alloc
 }
 
@@ -112,6 +112,10 @@ func (p EndBasedPortion) Less(than btree.Item) bool {
 type DataPortion struct {
 	Start address.Address
 	Len   uint16
+}
+
+func (p DataPortion) End() uint64 {
+	return p.Start.AsU64() + uint64(p.Len)
 }
 
 func (p DataPortion) Display() string {

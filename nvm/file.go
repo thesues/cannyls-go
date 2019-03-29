@@ -19,6 +19,10 @@ type FileNVM struct {
 }
 
 func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
+
+	if block.Min().IsAligned(capacity) == false {
+		return nil, internalerror.InvalidInput
+	}
 	var flags int
 	var f *os.File
 	var err error
@@ -165,9 +169,11 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
-	if !block.Min().IsAligned(uint64(bufLen)) {
-		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
-	}
+	/*
+		if !block.Min().IsAligned(uint64(bufLen)) {
+			return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
+		}
+	*/
 
 	len := util.Min(maxLen, bufLen)
 
@@ -199,9 +205,11 @@ func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
 
-	if !block.Min().IsAligned(uint64(bufLen)) {
-		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
-	}
+	/*
+		if !block.Min().IsAligned(uint64(bufLen)) {
+			return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
+		}
+	*/
 
 	len := util.Min(maxLen, bufLen)
 	newPosition := nvm.cursor_position + len

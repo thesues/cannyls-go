@@ -1,11 +1,16 @@
 package journal
 
 import (
+	"bufio"
+	"fmt"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
+	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
 	"io"
 )
+
+var _ = fmt.Print
 
 type JournalRingBuffer struct {
 	nvm            *JournalNvmBuffer
@@ -135,52 +140,94 @@ func (ring *JournalRingBuffer) isOverFlow(record JournalRecord) bool {
 	return writeEnd > ring.nvm.Capacity()
 }
 
-//Update the ring.head
-func (ring *JournalRingBuffer) PopFront() (entry JournalEntry, err error) {
-	ring.nvm.Seek(int64(ring.head), io.SeekStart)
-	record, err := ReadFrom(ring.nvm)
-	switch record.(type) {
-	case GoToFront:
-		ring.head = 0
-		ring.nvm.Seek(0, io.SeekStart)
-		return ring.PopFront()
-	case EndOfRecords:
-		//this will not update ring.head
-		return JournalEntry{}, internalerror.NoEntries
-	default:
-		entry = JournalEntry{
-			Start:  address.AddressFromU64(ring.head),
-			Record: record,
-		}
-		ring.head = entry.End()
-		return entry, nil
-	}
+func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
+	ring.unreleasedHead = head
+}
+
+type ReadIter struct {
+	readBuf *SeekableReader
+	ring    *JournalRingBuffer
 }
 
 //Update the ring.tail
-func (ring *JournalRingBuffer) PopItemForRestore() (entry JournalEntry, err error) {
-	ring.nvm.Seek(int64(ring.tail), io.SeekStart)
-	record, err := ReadFrom(ring.nvm)
+func (iter ReadIter) PopItemForRestore() (entry JournalEntry, err error) {
+	record, err := ReadRecordFrom(iter.readBuf)
 	switch record.(type) {
 	case GoToFront:
-		ring.tail = 0
-		ring.nvm.Seek(0, io.SeekStart)
-		return ring.PopFront()
+		iter.ring.tail = 0
+		iter.readBuf.Seek(0, io.SeekStart)
+		return iter.PopFront()
 	case EndOfRecords:
 		//this will not update ring.tail
 		return JournalEntry{}, internalerror.NoEntries
 	default:
 		entry = JournalEntry{
-			Start:  address.AddressFromU64(ring.tail),
+			Start:  address.AddressFromU64(iter.ring.tail),
 			Record: record,
 		}
-		ring.tail = entry.End()
+		iter.ring.tail = entry.End()
 		return entry, nil
+	}
+
+}
+
+//Update the ring.head
+func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
+	record, err := ReadRecordFrom(iter.readBuf)
+	if err != nil {
+		return JournalEntry{}, err
+	}
+	switch record.(type) {
+	case GoToFront:
+		iter.ring.head = 0
+		//ring.nvm.Seek(0, io.SeekStart)
+		iter.readBuf.Seek(0, io.SeekStart)
+		return iter.PopFront()
+	case EndOfRecords:
+		//this will not update ring.head
+		return JournalEntry{}, internalerror.NoEntries
+	default:
+		entry = JournalEntry{
+			Start:  address.AddressFromU64(iter.ring.head),
+			Record: record,
+		}
+		iter.ring.head = entry.End()
+		return entry, nil
+	}
+
+}
+
+func (ring *JournalRingBuffer) Iter() ReadIter {
+	readBuf := createSeekableReader(ring.nvm)
+	readBuf.Seek(int64(ring.head), 0)
+	return ReadIter{
+		readBuf: readBuf,
+		ring:    ring,
 	}
 }
 
-func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
-	ring.unreleasedHead = head
+type SeekableReader struct {
+	f nvm.NonVolatileMemory
+	*bufio.Reader
+}
+
+func createSeekableReader(f nvm.NonVolatileMemory) *SeekableReader {
+	return &SeekableReader{
+		f:      f,
+		Reader: bufio.NewReaderSize(f, 5<<20),
+	}
+}
+
+func (r *SeekableReader) Seek(offset int64, whence int) int64 {
+	if whence == 1 {
+		offset -= int64(r.Buffered())
+	}
+	off, err := r.f.Seek(offset, whence)
+	if err != nil {
+		panic("Seekable Reader can not seek")
+	}
+	r.Reset(r.f)
+	return off
 }
 
 /*

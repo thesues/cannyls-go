@@ -253,7 +253,7 @@ func (record DeleteRange) Tag() byte {
 
 //
 
-func ReadFrom(reader io.Reader) (JournalRecord, error) {
+func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 	checksum, tag, err := readRecordHeader(reader)
 	if err != nil {
 		return nil, err

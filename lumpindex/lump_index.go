@@ -100,6 +100,24 @@ func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.Lum
 	return vec
 }
 
+func (index *LumpIndex) DataPortions() []*portion.DataPortion {
+	vec := make([]*portion.DataPortion, 1)
+
+	sentinel := portion.NewDataPortion(0, 0)
+	vec[0] = &sentinel
+	index.tree.Ascend(func(a btree.Item) bool {
+		item := a.(internalItem)
+		if (item.n >> 63) == 1 {
+			len := uint16(item.n >> 40 & 0xFFFF)
+			start := item.n & (address.MAX_ADDRESS)
+			p := portion.NewDataPortion(start, len)
+			vec = append(vec, &p)
+		}
+		return true
+	})
+	return vec
+}
+
 func (item internalItem) Less(than btree.Item) bool {
 	left := item.id
 	right := (than.(internalItem)).id

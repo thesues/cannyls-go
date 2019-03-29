@@ -5,8 +5,11 @@ import (
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
+	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/portion"
+	"github.com/thesues/cannyls-go/util"
+	"sort"
 )
 
 //TODO: Use ceph bitmap algorithm
@@ -25,7 +28,7 @@ func New() *DataPortionAllocator {
 
 func Build(capacitySector uint32) *DataPortionAllocator {
 	alloc := New()
-	alloc.addFreePortion(portion.New(address.AddressFromU32(0), capacitySector))
+	alloc.addFreePortion(portion.NewFreePortion(address.AddressFromU32(0), capacitySector))
 	return alloc
 }
 
@@ -60,7 +63,8 @@ func (alloc *DataPortionAllocator) Display() {
 
 func (alloc *DataPortionAllocator) Allocate(size uint16) (free portion.DataPortion, err error) {
 	var isAllocated = false
-	start := portion.SizeBasedPortion(portion.New(address.AddressFromU32(0), uint32(size)))
+	start := portion.SizeBasedPortion(portion.NewFreePortion(
+		address.AddressFromU32(0), uint32(size)))
 	//loop over the btree, and find the first free portion, and slice the portion from the original part, and return
 	alloc.sizeToFree.AscendGreaterOrEqual(start, func(a btree.Item) bool {
 		p := portion.FreePortion(a.(portion.SizeBasedPortion))
@@ -97,7 +101,7 @@ func (alloc *DataPortionAllocator) Release(p portion.DataPortion) {
 func (alloc *DataPortionAllocator) isOverlapedPortion(p portion.DataPortion) bool {
 	var isOverlap = false
 	tmp := portion.FromDataPortion(p)
-	key := portion.EndBasedPortion(portion.New(tmp.Start(), 0))
+	key := portion.EndBasedPortion(portion.NewFreePortion(tmp.Start(), 0))
 
 	//Should be alloc.endToFree.AscendGreater
 	alloc.endToFree.AscendGreaterOrEqual(key, func(a btree.Item) bool {
@@ -120,13 +124,13 @@ func (alloc *DataPortionAllocator) isOverlapedPortion(p portion.DataPortion) boo
 func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (merged portion.FreePortion) {
 	merged = free
 	//find the a portion whose end equals to free's start
-	start := portion.EndBasedPortion(portion.New(free.Start(), 0))
+	start := portion.EndBasedPortion(portion.NewFreePortion(free.Start(), 0))
 	if prevPortion := alloc.endToFree.Get(start); prevPortion != nil {
 		p := portion.FreePortion(prevPortion.(portion.EndBasedPortion))
 		_, ok := p.CheckedExtend(free.Len())
 		//could enlarge to that big
 		if ok {
-			merged = portion.New(p.Start(), p.Len()+free.Len())
+			merged = portion.NewFreePortion(p.Start(), p.Len()+free.Len())
 			//remove prev
 			alloc.DeleteFreePortion(p)
 
@@ -136,13 +140,13 @@ func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (
 	}
 
 	//find a portion whose start equals to free's end
-	end := portion.EndBasedPortion(portion.New(free.End(), 0))
+	end := portion.EndBasedPortion(portion.NewFreePortion(free.End(), 0))
 	alloc.endToFree.AscendGreaterOrEqual(end, func(a btree.Item) bool {
 		p := portion.FreePortion(a.(portion.EndBasedPortion))
 		if p.Start() == free.End() {
 			_, ok := free.CheckedExtend(p.Len())
 			if ok {
-				merged = portion.New(free.Start(), free.Len()+p.Len())
+				merged = portion.NewFreePortion(free.Start(), free.Len()+p.Len())
 				//alloc.endToFree.Delete(portion.EndBasedPortion(p))
 				alloc.DeleteFreePortion(p)
 			}
@@ -152,5 +156,32 @@ func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (
 	})
 
 	return merged
+
+}
+
+func (alloc *DataPortionAllocator) RestoreFromIndex(blockSize block.BlockSize,
+	capacityInByte uint64, vec []*portion.DataPortion) {
+
+	//sort the slice reverse
+	sort.Slice(vec, func(i, j int) bool {
+		return vec[i].End() > vec[j].End()
+	})
+
+	tail := capacityInByte / uint64(blockSize.AsU16())
+
+	//From end to the front
+	for _, p := range vec {
+		for p.End() < tail {
+			delta := tail - p.End()
+
+			size := util.Min(0xFFFFFF, delta)
+
+			tail -= size
+
+			start := address.AddressFromU64(tail)
+			free := portion.NewFreePortion(start, uint32(size))
+			alloc.addFreePortion(free)
+		}
+	}
 
 }

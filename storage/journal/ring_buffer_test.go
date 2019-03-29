@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/block"
-	_ "github.com/thesues/cannyls-go/internalerror"
+	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
@@ -39,8 +39,11 @@ func TestRingBufferAppend(t *testing.T) {
 	var entry JournalEntry
 	var err error
 	var position uint64 = 0
+	//ring.ResetReadBufToHead()
+	iter := ring.Iter()
 	for {
-		if entry, err = ring.PopFront(); err != nil {
+		if entry, err = iter.PopFront(); err != nil {
+			assert.Equal(t, err, internalerror.NoEntries)
 			break
 		}
 		assert.Equal(t, cases[i], entry.Record)
@@ -104,7 +107,6 @@ func TestRingBufferFull(t *testing.T) {
 	assert.Equal(t, uint64(1008), ring.Tail())
 
 	_, err := ring.Enqueue(record)
-	fmt.Println(err)
 	assert.Error(t, err)
 
 	ring.unreleasedHead = 511
