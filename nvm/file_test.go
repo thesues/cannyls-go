@@ -24,7 +24,14 @@ func TestFileNVMReopen(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024)
 	assert.Nil(t, err)
 
+	DefaultStorageHeader().WriteTo(nvm)
+	nvm.Sync()
+	nvm.Close()
+
 	defer os.Remove("foo-test.lusf")
+
+	nvm, _, err = Open("foo-test.lusf")
+	assert.Nil(t, err)
 
 	data := bytes.NewBuffer([]byte{})
 	err = DefaultStorageHeader().WriteTo(data)
@@ -50,11 +57,6 @@ func TestFileNVMReopen(t *testing.T) {
 
 	nvm, _, err = Open("foo-test.lusf")
 	assert.Nil(t, err)
-
-	/*
-		Now foo-test.lusf should be
-		Header Messages + "bar" in the first sector
-	*/
 
 	ab := block.NewAlignedBytes(headerSize+3, block.Min()).Align().AsBytes()
 
@@ -158,7 +160,12 @@ func TestFileNVMOperations(t *testing.T) {
 func TestFileNVMDirectIO(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-dio", 1024)
 	defer os.Remove("foo-dio")
+	DefaultStorageHeader().WriteTo(nvm)
+	nvm.Sync()
+	nvm.Close()
 	//
+	nvm, _, err = Open("foo-dio")
+	assert.Nil(t, err)
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, true, isDirectIO(flag))
@@ -169,6 +176,12 @@ func TestFileNVMEXLock(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-dio", 1024)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio")
+	DefaultStorageHeader().WriteTo(nvm)
+	nvm.Sync()
+	nvm.Close()
+
+	nvm, _, err = Open("foo-dio")
+	assert.Nil(t, err)
 
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
 	assert.Nil(t, err)

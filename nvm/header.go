@@ -55,7 +55,7 @@ type StorageHeader struct {
 }
 
 func DefaultStorageHeader() *StorageHeader {
-	uuid, _ := uuid.NewV4()
+	uuid := uuid.NewV4()
 	return &StorageHeader{
 		MajorVersion:      MAJOR_VERSION,
 		MinorVersion:      MINOR_VERSION,

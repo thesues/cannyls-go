@@ -17,8 +17,7 @@ func TestStorageHeader(t *testing.T) {
 	bs, err := block.NewBlockSize(512)
 	assert.Nil(t, err)
 
-	uuid, err := uuid.NewV4()
-	assert.Nil(t, err)
+	uuid := uuid.NewV4()
 
 	header := StorageHeader{
 		MajorVersion:      MAJOR_VERSION,
