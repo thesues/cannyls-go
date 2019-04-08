@@ -125,7 +125,7 @@ func (p DataPortion) Display() string {
 func (p DataPortion) ShiftBlockToBytes(b block.BlockSize) (offset uint64, size uint32) {
 	s := b.AsU16()
 	offset = p.Start.AsU64() * uint64(s)
-	size = uint32(p.Len * s)
+	size = uint32(p.Len) * uint32(s)
 	return
 }
 

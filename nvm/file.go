@@ -18,10 +18,22 @@ type FileNVM struct {
 	splited         bool //splited file is not allowd to call file.Close()
 }
 
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
 func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 
 	if block.Min().IsAligned(capacity) == false {
 		return nil, internalerror.InvalidInput
+	}
+
+	if fileExists(path) {
+		return nil, os.ErrExist
 	}
 	var flags int
 	var f *os.File
@@ -146,9 +158,11 @@ func (nvm *FileNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolati
 }
 
 func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
+	/*FIXME
 	if !block.Min().IsAligned(uint64(offset)) {
 		return offset, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d", offset)
 	}
+	*/
 
 	//abs is relative to the current FileNVM, start from 0
 	abs, err := ConvertToOffset(nvm, offset, whence)

@@ -308,7 +308,8 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 	}
 
 	if checksum != record.CheckSum() {
-		return nil, errors.Wrapf(internalerror.StorageCorrupted, "checksum disk: %d , mem: %d", checksum, record.CheckSum())
+		return nil, errors.Wrapf(internalerror.StorageCorrupted,
+			"tag: %d, on checksum disk: %d , mem: %+v", tag, checksum, record)
 	}
 
 	return record, nil
@@ -325,14 +326,15 @@ func readLumpId(reader io.Reader) (lump.LumpId, error) {
 }
 
 func writeRecordHeader(record JournalRecord, writer io.Writer) error {
+	var buf [5]byte //checksum + tag
 	//checksum
 	checksum := record.CheckSum()
-	if err := binary.Write(writer, binary.BigEndian, checksum); err != nil {
-		return err
-	}
+	binary.BigEndian.PutUint32(buf[:4], checksum)
 	//tag
 	tag := record.Tag()
-	return binary.Write(writer, binary.BigEndian, tag)
+	buf[4] = tag
+	_, err := writer.Write(buf[:])
+	return err
 }
 
 func readRecordHeader(reader io.Reader) (uint32, byte, error) {

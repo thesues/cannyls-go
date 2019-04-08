@@ -25,7 +25,7 @@ type internalItem struct {
 
 func NewIndex() *LumpIndex {
 	return &LumpIndex{
-		tree: btree.New(2),
+		tree: btree.New(32),
 	}
 }
 func (index *LumpIndex) Get(id lump.LumpId) (p portion.Portion, err error) {
@@ -35,17 +35,7 @@ func (index *LumpIndex) Get(id lump.LumpId) (p portion.Portion, err error) {
 		return nil, errors.Wrapf(internalerror.InvalidInput, "failed to get key :%s", id.String())
 	}
 
-	n := item.(internalItem).n
-	//data portion
-	kind := n >> 63
-	len := uint16(n >> 40 & 0xFFFF)
-	start := n & (address.MAX_ADDRESS)
-	if kind == 0 {
-		p = portion.NewJournalPortion(start, len)
-	} else {
-
-		p = portion.NewDataPortion(start, len)
-	}
+	p = fromItemToPortion(item)
 	return p, nil
 }
 
@@ -63,9 +53,29 @@ func (index *LumpIndex) InsertJournalPortion(id lump.LumpId, data portion.Journa
 	index.tree.ReplaceOrInsert(key)
 }
 
-func (index *LumpIndex) Delete(id lump.LumpId) {
+func (index *LumpIndex) Delete(id lump.LumpId) portion.Portion {
 	key := internalItem{id: id, n: 0}
-	index.tree.Delete(key)
+	item := index.tree.Delete(key)
+
+	return fromItemToPortion(item)
+}
+
+func fromItemToPortion(item btree.Item) portion.Portion {
+	if item == nil {
+		return nil
+	}
+	var p portion.Portion
+	n := item.(internalItem).n
+	//data portion
+	kind := n >> 63
+	len := uint16(n >> 40 & 0xFFFF)
+	start := n & (address.MAX_ADDRESS)
+	if kind == 0 {
+		p = portion.NewJournalPortion(start, len)
+	} else {
+		p = portion.NewDataPortion(start, len)
+	}
+	return p
 }
 
 //bugy, the returned slice could be very large, should not be used production

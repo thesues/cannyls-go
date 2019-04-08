@@ -87,7 +87,7 @@ func TestFileNVMSimpleCreate(t *testing.T) {
 	_, err = os.Stat("foo")
 	assert.Nil(t, err)
 
-	nvm, err = CreateIfAbsent("foo", 10*1024)
+	nvm, _, err = Open("foo")
 
 	assert.Nil(t, err)
 

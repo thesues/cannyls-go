@@ -27,19 +27,9 @@ type JournalRegion struct {
 	gcAfterAppend bool
 }
 
-/*
-func InitialJournalRegion(nvm nvm.NonVolatileMemory) {
-	header := NewJournalHeadRegion(nvm)
-	if err := header.WriteTo(0); err != nil {
-		panic("failed to initialize JournalRegion")
-	}
-	r := EndOfRecords{}
-	ab := block.NewAlignedBytes(512, nvm.BlockSize())
-	if err := r.WriteTo(nvm); err != nil {
-		panic("failed to initialize JournalRegion")
-	}
+func (journal *JournalRegion) SetAutomaticGcMode(gc bool) {
+	journal.gcAfterAppend = gc
 }
-*/
 
 //This writer is not direct-io
 func InitialJournalRegion(writer io.Writer, sector block.BlockSize) {
@@ -70,8 +60,12 @@ func OpenJournalRegion(nvm nvm.NonVolatileMemory) (*JournalRegion, error) {
 		return nil, err
 	}
 
+	//FIXME
+	//if
 	ringBuffer := NewJournalNvmBuffer(ringNVM)
 	ring := NewJournalRingBuffer(ringBuffer, header)
+	//else
+	//ring := NewJournalRingBuffer(ringNVM, header)
 
 	q := queue.New()
 	q.Init()
@@ -84,7 +78,7 @@ func OpenJournalRegion(nvm nvm.NonVolatileMemory) (*JournalRegion, error) {
 	}, nil
 }
 
-func (journal *JournalRegion) RestoreIndex(index lumpindex.LumpIndex) {
+func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 	var entry JournalEntry
 	var err error
 	iter := journal.ring.Iter()
@@ -113,22 +107,25 @@ func (journal *JournalRegion) RestoreIndex(index lumpindex.LumpIndex) {
 		}
 	}
 }
-func (journal *JournalRegion) append(index *lumpindex.LumpIndex, record JournalRecord) {
+func (journal *JournalRegion) append(index *lumpindex.LumpIndex, record JournalRecord) error {
 	var err error
 	var embeded portion.JournalPortion
 	if embeded, err = journal.ring.Enqueue(record); err != nil {
-		panic(fmt.Sprintf("Write record failed %v", err))
+		return err
 	}
 	//if record is an embeded entry, we should update the index as well
+	//because journal GC start after append, to prevent to be GCed
 	switch v := record.(type) {
 	case EmbedRecord:
 		index.InsertJournalPortion(v.LumpID, embeded)
 	}
+	return nil
 }
 
-func (journal *JournalRegion) appendWithGC(index *lumpindex.LumpIndex, record JournalRecord) (jbportion portion.JournalPortion) {
-
-	journal.append(index, record)
+func (journal *JournalRegion) appendWithGC(index *lumpindex.LumpIndex, record JournalRecord) (err error) {
+	if err = journal.append(index, record); err != nil {
+		return err
+	}
 	if journal.gcAfterAppend {
 		journal.gcOnce(index)
 	}
@@ -154,7 +151,7 @@ func (Journal *JournalRegion) isGarbage(index *lumpindex.LumpIndex, entry Journa
 			return true
 		}
 		journalPortion = p.(portion.JournalPortion)
-		if journalPortion.Start == entry.Start && int(journalPortion.Len) == len(v.Data) {
+		if journalPortion.Start == entry.Start+EMBEDDED_DATA_OFFSET && int(journalPortion.Len) == len(v.Data) {
 			return false
 		} else {
 			return true
@@ -179,23 +176,31 @@ func (journal *JournalRegion) gcOnce(index *lumpindex.LumpIndex) {
 				goto ENDFOR
 			}
 
+		} else {
+			break
 		}
 	}
 
 ENDFOR:
 
-	if journal.gcQueue.Len() == 0 {
-		//head == unrelease head
-		head := journal.ring.Head()
-		journal.ring.ReleaseBytesUntil(head)
-	} else {
-		//we have processoed at lease one journal, update unreleased head
-		e := journal.gcQueue.Front()
-		r := e.(JournalEntry)
-		head := r.Start.AsU64()
-		journal.ring.ReleaseBytesUntil(head)
-	}
+	/*
+		front := journal.gcQueue.Front()
+		if front != nil {
+			//assert head == unrelease head
+			//head := journal.ring.Head()
+			head := front.(JournalEntry).Start
+			journal.ring.ReleaseBytesUntil(head.AsU64())
+		} else {
+			head := journal.ring.Head()
+			journal.ring.ReleaseBytesUntil(head)
+		}
+	*/
 
+}
+
+func (journal *JournalRegion) writeUnusedJournalHeader(head uint64) {
+	journal.headerRegion.WriteTo(head)
+	journal.ring.ReleaseBytesUntil(head)
 }
 
 func (journal *JournalRegion) fillGCQueue() {
@@ -203,42 +208,31 @@ func (journal *JournalRegion) fillGCQueue() {
 	if journal.ring.isEmpty() {
 		return
 	}
-
 	//assert (ring.unrelease_head == ring.head)
-
+	fmt.Printf("update unused head to %d\n", journal.ring.head)
+	journal.writeUnusedJournalHeader(journal.ring.head)
 	var i int
 	i = 0
 	iter := journal.ring.Iter()
 	for i < GC_QUEUE_SIZE {
 		entry, err := iter.PopFront()
+		//fmt.Printf("read entry: %+v, err: %+v\n", entry, err)
 		if err == internalerror.NoEntries {
 			break
 		}
 		if err != nil {
-			panic(fmt.Sprintf("Journal failed to read entries"))
+			panic(fmt.Sprintf("Journal failed to read entries %+v", err))
 		}
 		journal.gcQueue.PushBack(entry)
 		i++
 	}
-
-	if journal.gcQueue.Len() != 0 {
-		journal.headerRegion.WriteTo(journal.ring.unreleasedHead)
-	}
-
-	/*
-		if i > 0 {
-			firstEntry := journal.gcQueue.Front().(JournalEntry)
-			if err := journal.headerRegion.WriteTo(firstEntry.Start.AsU64()); err != nil {
-				panic("sync journal header failed")
-			}
-		}
-	*/
 }
 
 func (journal *JournalRegion) Sync() {
 	if err := journal.ring.Sync(); err != nil {
 		panic(fmt.Sprintf("journal sync failed: %v", err))
 	}
+	//journal.headerRegion.WriteTo(journal.ring.unreleasedHead)
 	journal.syncCountDown = SYNC_INTERVAL
 }
 
@@ -251,37 +245,36 @@ func (journal *JournalRegion) trySync() {
 }
 
 //Write Journal, Update Index
-func (journal *JournalRegion) RecordPut(index *lumpindex.LumpIndex, id lump.LumpId, data portion.DataPortion) {
+func (journal *JournalRegion) RecordPut(index *lumpindex.LumpIndex, id lump.LumpId, data portion.DataPortion) error {
 	record := PutRecord{
 		LumpID:      id,
 		DataPortion: data,
 	}
-	journal.appendWithGC(index, record)
+	return journal.appendWithGC(index, record)
 }
 
 //WARNING: this will update the INDEX
-func (journal *JournalRegion) RecordEmbed(index *lumpindex.LumpIndex, id lump.LumpId, data []byte) {
+func (journal *JournalRegion) RecordEmbed(index *lumpindex.LumpIndex, id lump.LumpId, data []byte) error {
 	record := EmbedRecord{
 		LumpID: id,
 		Data:   data,
 	}
-	journal.appendWithGC(index, record)
+	return journal.appendWithGC(index, record)
 }
 
-func (journal *JournalRegion) RecordDelete(index *lumpindex.LumpIndex, id lump.LumpId) {
+func (journal *JournalRegion) RecordDelete(index *lumpindex.LumpIndex, id lump.LumpId) error {
 	record := DeleteRecord{
 		LumpID: id,
 	}
-	journal.appendWithGC(index, record)
+	return journal.appendWithGC(index, record)
 }
 
-func (journal *JournalRegion) RecordDeleteRange(index *lumpindex.LumpIndex, start, end lump.LumpId) {
+func (journal *JournalRegion) RecordDeleteRange(index *lumpindex.LumpIndex, start, end lump.LumpId) error {
 	record := DeleteRange{
 		Start: start,
 		End:   end,
 	}
-	journal.appendWithGC(index, record)
-
+	return journal.appendWithGC(index, record)
 }
 
 func (journal *JournalRegion) RunSideJobOnce(index *lumpindex.LumpIndex) {
@@ -296,16 +289,34 @@ func (journal *JournalRegion) RunSideJobOnce(index *lumpindex.LumpIndex) {
 	}
 }
 
-func (journal *JournalRegion) GetEmbededData(embeded portion.JournalPortion) []byte {
-	buf := make([]byte, embeded.Len)
-	journal.ring.ReadEmbededBuffer(embeded.Start.AsU64(), buf)
-	return buf
+func (journal *JournalRegion) GetEmbededData(embeded portion.JournalPortion) (buf []byte, err error) {
+	buf = make([]byte, embeded.Len)
+	if err = journal.ring.ReadEmbededBuffer(embeded.Start.AsU64(), buf); err != nil {
+		return nil, err
+	}
+	return
 }
 
 func (journal *JournalRegion) gcAllEntriesInQueue(index *lumpindex.LumpIndex) {
 	for journal.gcQueue.Len() != 0 {
 		journal.gcOnce(index)
 	}
+}
+
+func (journal *JournalRegion) JournalEntries() (uint64, uint64, uint64, []JournalEntry) {
+	entries := make([]JournalEntry, 0)
+	iter := journal.ring.Iter()
+	for {
+		entry, err := iter.PopFrontWithoutUpdate()
+		if err == internalerror.NoEntries {
+			break
+		}
+		if err != nil {
+			panic(fmt.Sprintf("Journal failed to read entries"))
+		}
+		entries = append(entries, entry)
+	}
+	return journal.ring.unreleasedHead, journal.ring.head, journal.ring.tail, entries
 }
 
 //maybe sync
@@ -324,8 +335,10 @@ func (journal *JournalRegion) GcAllEntries(index *lumpindex.LumpIndex) {
 			break
 		}
 	}
+	journal.writeUnusedJournalHeader(journal.ring.Head())
 	//assert head == unreleased_head
-	journal.headerRegion.WriteTo(journal.ring.Head())
+	//journal.headerRegion.WriteTo(journal.ring.Head())
+	//journal.Sync()
 }
 
 //I do not understand this!

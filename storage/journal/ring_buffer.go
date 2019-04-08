@@ -13,7 +13,9 @@ import (
 var _ = fmt.Print
 
 type JournalRingBuffer struct {
-	nvm            *JournalNvmBuffer
+	//FIXME
+	//	nvm            *JournalNvmBuffer
+	nvm            nvm.NonVolatileMemory
 	unreleasedHead uint64
 	head           uint64
 	tail           uint64
@@ -28,7 +30,8 @@ func (ring *JournalRingBuffer) Tail() uint64 {
 	return ring.tail
 }
 
-func NewJournalRingBuffer(nvm *JournalNvmBuffer, head uint64) *JournalRingBuffer {
+//func NewJournalRingBuffer(nvm *JournalNvmBuffer, head uint64) *JournalRingBuffer {
+func NewJournalRingBuffer(nvm nvm.NonVolatileMemory, head uint64) *JournalRingBuffer {
 	return &JournalRingBuffer{
 		nvm:            nvm,
 		unreleasedHead: head,
@@ -129,6 +132,8 @@ func (ring *JournalRingBuffer) checkFreeSpace(record JournalRecord) bool {
 		freeEnd = ring.Capacity() + ring.unreleasedHead
 	}
 
+	//fmt.Printf("Usage: %d, tail = %d, freeEnd = %d\n", ring.Usage(), ring.tail, freeEnd)
+
 	if writeEnd > freeEnd {
 		return false
 	}
@@ -147,6 +152,7 @@ func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
 type ReadIter struct {
 	readBuf *SeekableReader
 	ring    *JournalRingBuffer
+	current uint64
 }
 
 //Update the ring.tail
@@ -197,12 +203,41 @@ func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
 
 }
 
+//do not Update the ring.head
+func (iter ReadIter) PopFrontWithoutUpdate() (entry JournalEntry, err error) {
+	record, err := ReadRecordFrom(iter.readBuf)
+	if err != nil {
+		return JournalEntry{}, err
+	}
+	switch record.(type) {
+	case GoToFront:
+		//iter.ring.head = 0
+		//ring.nvm.Seek(0, io.SeekStart)
+		iter.current = 0
+		iter.readBuf.Seek(0, io.SeekStart)
+		return iter.PopFrontWithoutUpdate()
+	case EndOfRecords:
+		//this will not update ring.head
+		return JournalEntry{}, internalerror.NoEntries
+	default:
+		entry = JournalEntry{
+			Start:  address.AddressFromU64(iter.ring.head),
+			Record: record,
+		}
+		//iter.ring.head = entry.End()
+		iter.current = entry.End()
+		return entry, nil
+	}
+
+}
+
 func (ring *JournalRingBuffer) Iter() ReadIter {
 	readBuf := createSeekableReader(ring.nvm)
 	readBuf.Seek(int64(ring.head), 0)
 	return ReadIter{
 		readBuf: readBuf,
 		ring:    ring,
+		current: ring.head,
 	}
 }
 
@@ -214,7 +249,7 @@ type SeekableReader struct {
 func createSeekableReader(f nvm.NonVolatileMemory) *SeekableReader {
 	return &SeekableReader{
 		f:      f,
-		Reader: bufio.NewReaderSize(f, 5<<20),
+		Reader: bufio.NewReaderSize(f, 1<<20),
 	}
 }
 

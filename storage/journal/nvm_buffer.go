@@ -1,12 +1,15 @@
 package journal
 
 import (
+	"fmt"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/util"
 	"io"
 )
+
+var _ = fmt.Println
 
 type JournalNvmBuffer struct {
 	nvm            nvm.NonVolatileMemory
@@ -70,6 +73,7 @@ func (jb *JournalNvmBuffer) Read(buf []byte) (n int, err error) {
 	readBufEnd := jb.nvm.BlockSize().CeilAlign(jb.position + uint64(len(buf)))
 	jb.readBuf.AlignResize(uint32(readBufEnd - readBufStart))
 
+	//fmt.Printf("len: ", jb.readBuf.Len())
 	//Seek the aligned sector and read from disk
 	if _, err := jb.nvm.Seek(int64(readBufStart), io.SeekStart); err != nil {
 		return -1, err
@@ -108,6 +112,7 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 		copy(jb.writeBuf.AsBytes()[start:end], buf)
 		jb.position += uint64(len(buf))
 		jb.maybeDirty = true
+		//fmt.Printf("buffer size is %d\n", jb.writeBuf.Len())
 		return len(buf), nil
 	} else {
 		if err := jb.flushWriteBuffer(); err != nil {
@@ -118,8 +123,10 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 		if jb.nvm.BlockSize().IsAligned(jb.position) {
 			jb.writeBuf.AlignResize(0)
 			jb.writeBufOffset = jb.position
+			//fmt.Printf("update buf offset to %d", jb.position)
 		} else {
 			jb.writeBufOffset = jb.nvm.BlockSize().FloorAlign(jb.position)
+			//fmt.Printf("update buf offset to %d", jb.position)
 			jb.writeBuf.AlignResize(uint32(jb.nvm.BlockSize().AsU16())) //resize to a sector
 			jb.nvm.Seek(int64(jb.writeBufOffset), io.SeekStart)
 			jb.nvm.Read(jb.writeBuf.AsBytes())
@@ -148,6 +155,7 @@ func (jb *JournalNvmBuffer) flushWriteBuffer() error {
 		return nil
 	}
 
+	//fmt.Println("FLUSH DATA")
 	if _, err := jb.nvm.Seek(int64(jb.writeBufOffset), io.SeekStart); err != nil {
 		return err
 	}
@@ -166,6 +174,7 @@ func (jb *JournalNvmBuffer) flushWriteBuffer() error {
 		jb.writeBuf.Truncate(newLen)
 		jb.writeBufOffset += uint64(dropLen)
 	}
+
 	jb.maybeDirty = false
 	return nil
 }

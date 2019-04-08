@@ -48,12 +48,16 @@ type LumpDataInner int
 const (
 	JournalRegion = iota
 	DataRegion
-	DataRegionUnaligned
+
+//	DataRegionUnaligned
 )
 
 type LumpData struct {
-	Inner     *block.AlignedBytes
-	innerType LumpDataInner
+	Inner *block.AlignedBytes
+}
+
+type LumpEmbededData struct {
+	Inner []byte
 }
 
 /*
@@ -80,29 +84,20 @@ func NewLumpDataEmbedded(buf []byte) (*LumpData, error) {
 }
 */
 
-//TODO, to be aligned
-func NewLumpDataAligned(size int, blockSize block.BlockSize) *LumpData {
+//TODO, to be aligned at upper
+func NewLumpDataAligned(size int, blockSize block.BlockSize) LumpData {
 	ab := block.NewAlignedBytes(size, blockSize)
-	return &LumpData{
-		Inner:     ab,
-		innerType: DataRegion,
+	return LumpData{
+		Inner: ab,
 	}
 }
 
-func NewLumpDataWithAb(ab *block.AlignedBytes) *LumpData {
-	return &LumpData{
-		Inner:     ab,
-		innerType: DataRegion,
+func NewLumpDataWithAb(ab *block.AlignedBytes) LumpData {
+	return LumpData{
+		Inner: ab,
 	}
 }
 
-func (l *LumpData) AsBytes() []byte {
+func (l LumpData) AsBytes() []byte {
 	return l.Inner.AsBytes()
-}
-
-func DefaultLumpData() *LumpData {
-	return &LumpData{
-		Inner:     nil,
-		innerType: DataRegion,
-	}
 }

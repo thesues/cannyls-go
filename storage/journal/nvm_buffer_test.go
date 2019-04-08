@@ -118,23 +118,6 @@ func TestJournalNvmBufferAutoFlush1(t *testing.T) {
 
 }
 
-/*
-    fn overwritten() -> TestResult {
-        // シーク地点よりも前方のデータは保持される.
-        // (後方の、次のブロック境界までのデータがどうなるかは未定義)
-        let mut buffer = new_buffer();
-        track_io!(buffer.write_all(&[b'a'; 512]))?;
-        track_io!(buffer.flush())?;
-        assert_eq!(&buffer.nvm().as_bytes()[0..512], &[b'a'; 512][..]);
-
-        track_io!(buffer.seek(SeekFrom::Start(256)))?;
-        track_io!(buffer.write_all(&[b'b'; 1]))?;
-        track_io!(buffer.flush())?;
-        assert_eq!(&buffer.nvm().as_bytes()[0..256], &[b'a'; 256][..]);
-        assert_eq!(buffer.nvm().as_bytes()[256], b'b');
-        Ok(())
-	}
-*/
 
 func TestJournalNvmBufferOverwrite(t *testing.T) {
 	f := newMemNVM()

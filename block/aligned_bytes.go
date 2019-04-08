@@ -1,8 +1,11 @@
 package block
 
 import (
+	"fmt"
 	"unsafe"
 )
+
+var _ = fmt.Printf
 
 type AlignedBytes struct {
 	buf    []byte

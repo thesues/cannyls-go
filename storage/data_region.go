@@ -1,7 +1,7 @@
 package storage
 
 import (
-	_ "fmt"
+	"fmt"
 	"github.com/thesues/cannyls-go/block"
 	_ "github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
@@ -50,7 +50,7 @@ func (region *DataRegion) shiftBlockSize(size uint32) uint32 {
 */
 
 //WARNING: this PUT would CHANGE (data *lump.LumpData),
-func (region *DataRegion) Put(data *lump.LumpData) (portion.DataPortion, error) {
+func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 	//
 	size := data.Inner.Len() + LUMP_DATA_TRAILER_SIZE
 
@@ -73,7 +73,9 @@ func (region *DataRegion) Put(data *lump.LumpData) (portion.DataPortion, error) 
 
 	offset, len := data_portion.ShiftBlockToBytes(region.block_size)
 	if len != data.Inner.Len() {
-		panic("should be the same in data_region put")
+		panic(fmt.Sprintf("should be the same in data_region put userdata:%d , diskdata:%d",
+			data.Inner.Len(), len))
+		//FIXME
 	}
 	if _, err = region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
 		return data_portion, err
@@ -89,17 +91,17 @@ func (region *DataRegion) Release(portion portion.DataPortion) {
 	region.allocator.Release(portion)
 }
 
-func (region *DataRegion) Get(portion portion.DataPortion) (*lump.LumpData, error) {
+func (region *DataRegion) Get(portion portion.DataPortion) (lump.LumpData, error) {
 	offset, len := portion.ShiftBlockToBytes(region.block_size)
 
 	if _, err := region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
-		return lump.DefaultLumpData(), err
+		return lump.LumpData{}, err
 	}
 
 	ab := block.NewAlignedBytes(int(len), region.block_size)
 
 	if _, err := region.nvm.Read(ab.AsBytes()); err != nil {
-		return lump.DefaultLumpData(), err
+		return lump.LumpData{}, err
 	}
 
 	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))

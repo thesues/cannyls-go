@@ -8,21 +8,22 @@ import (
 )
 
 func NewJournalHeadRegion(nvm nvm.NonVolatileMemory) *JournalHeaderRegion {
+	ab := block.NewAlignedBytes(int(block.MIN), block.Min())
+	ab.Align()
 	return &JournalHeaderRegion{
 		nvm: nvm,
+		ab:  ab,
 	}
 }
 
 type JournalHeaderRegion struct {
 	nvm nvm.NonVolatileMemory
+	ab  *block.AlignedBytes
 }
 
 func (headerRegion *JournalHeaderRegion) WriteTo(head uint64) (err error) {
-	sector := headerRegion.nvm.BlockSize()
-	ab := block.NewAlignedBytes(int(sector.AsU16()), sector)
-	buf := ab.AsBytes()
-	ab.Align()
-	util.PutUINT64(buf, head)
+	buf := headerRegion.ab.AsBytes()
+	util.PutUINT64(buf[:8], head)
 	if _, err = headerRegion.nvm.Seek(0, io.SeekStart); err != nil {
 		return
 	}
@@ -35,10 +36,7 @@ func (headerRegion *JournalHeaderRegion) WriteTo(head uint64) (err error) {
 
 func (headerRegion *JournalHeaderRegion) ReadFrom() (head uint64, err error) {
 	head = 0
-	sector := headerRegion.nvm.BlockSize()
-	ab := block.NewAlignedBytes(int(sector.AsU16()), sector)
-	ab.Align()
-	buf := ab.AsBytes()
+	buf := headerRegion.ab.AsBytes()
 	if _, err = headerRegion.nvm.Seek(0, io.SeekStart); err != nil {
 		return
 	}
