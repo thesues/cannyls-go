@@ -155,6 +155,33 @@ type ReadIter struct {
 	current uint64
 }
 
+type FuckIter struct {
+	ring    *JournalRingBuffer
+}
+func (iter FuckIter) PopFront() (entry JournalEntry, err error) {
+        record, err := ReadRecordFrom(iter.ring.nvm)
+        if err != nil {
+                return JournalEntry{}, err
+        }
+        switch record.(type) {
+        case GoToFront:
+                iter.ring.head = 0
+                iter.ring.nvm.Seek(0, io.SeekStart)
+                return iter.PopFront()
+        case EndOfRecords:
+                //this will not update ring.head
+                return JournalEntry{}, internalerror.NoEntries
+        default:
+                entry = JournalEntry{
+                        Start:  address.AddressFromU64(iter.ring.head),
+                        Record: record,
+                }
+                iter.ring.head = entry.End()
+                return entry, nil
+        }
+
+}
+
 //Update the ring.tail
 func (iter ReadIter) PopItemForRestore() (entry JournalEntry, err error) {
 	record, err := ReadRecordFrom(iter.readBuf)
@@ -241,6 +268,14 @@ func (ring *JournalRingBuffer) Iter() ReadIter {
 	}
 }
 
+func (ring *JournalRingBuffer) FuckIter() FuckIter {
+	readBuf := createSeekableReader(ring.nvm)
+	readBuf.Seek(int64(ring.head), 0)
+	return FuckIter{
+		ring:    ring,
+	}
+}
+
 type SeekableReader struct {
 	f nvm.NonVolatileMemory
 	*bufio.Reader
@@ -249,7 +284,7 @@ type SeekableReader struct {
 func createSeekableReader(f nvm.NonVolatileMemory) *SeekableReader {
 	return &SeekableReader{
 		f:      f,
-		Reader: bufio.NewReaderSize(f, 1<<20),
+		Reader: bufio.NewReaderSize(f, 1<<10),
 	}
 }
 

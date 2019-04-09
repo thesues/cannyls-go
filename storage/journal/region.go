@@ -213,7 +213,7 @@ func (journal *JournalRegion) fillGCQueue() {
 	journal.writeUnusedJournalHeader(journal.ring.head)
 	var i int
 	i = 0
-	iter := journal.ring.Iter()
+	iter := journal.ring.FuckIter()
 	for i < GC_QUEUE_SIZE {
 		entry, err := iter.PopFront()
 		//fmt.Printf("read entry: %+v, err: %+v\n", entry, err)
