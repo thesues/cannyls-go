@@ -157,11 +157,11 @@ type ReadIter struct {
 	current uint64
 }
 
-type FuckIter struct {
+type DequeueIter struct {
 	ring *JournalRingBuffer
 }
 
-func (iter FuckIter) PopFront() (entry JournalEntry, err error) {
+func (iter DequeueIter) PopFront() (entry JournalEntry, err error) {
 	record, err := ReadRecordFrom(iter.ring.nvm)
 	if err != nil {
 		return JournalEntry{}, err
@@ -271,10 +271,10 @@ func (ring *JournalRingBuffer) Iter() ReadIter {
 	}
 }
 
-func (ring *JournalRingBuffer) FuckIter() FuckIter {
+func (ring *JournalRingBuffer) DequeueIter() DequeueIter {
 	readBuf := createSeekableReader(ring.nvm)
 	readBuf.Seek(int64(ring.head), 0)
-	return FuckIter{
+	return DequeueIter{
 		ring: ring,
 	}
 }

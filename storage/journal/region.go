@@ -218,7 +218,7 @@ func (journal *JournalRegion) fillGCQueue() {
 
 	var i int
 	i = 0
-	iter := journal.ring.FuckIter()
+	iter := journal.ring.DequeueIter()
 	for i < GC_QUEUE_SIZE {
 		entry, err := iter.PopFront()
 		//fmt.Printf("read entry: %+v, err: %+v\n", entry, err)
