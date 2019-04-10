@@ -65,8 +65,7 @@ func (ab *AlignedBytes) Align() *AlignedBytes {
 }
 
 func (ab *AlignedBytes) AsBytes() []byte {
-
-	return ab.buf[ab.offset:ab.len]
+	return ab.buf[ab.offset : uint32(ab.offset)+ab.len]
 }
 
 func (ab *AlignedBytes) Resize(newLen uint32) {
