@@ -12,7 +12,6 @@ import (
 
 var _ = fmt.Print
 
-/*
 func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 	//10M
 	_, err := CreateCannylsStorage("test.lusf", 10<<20, 0.01)
@@ -167,7 +166,6 @@ func TestCreateCannylsOverflow(t *testing.T) {
 	assert.Equal(t, uint64(784), snapshot.Tail)
 
 }
-*/
 
 /*
 26624 => 32 * 1024 NO
@@ -178,7 +176,7 @@ func TestCreateCannylsOverflow(t *testing.T) {
 */
 func TestStorageLoopForEver(t *testing.T) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf", 20*1024, 0.8)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 64*1024*1024, 0.8)
 	assert.Nil(t, err)
 	//storage, err := CreateCannylsStorage("tmp11.lusf", 10*1024, 0.8) test case
 	fmt.Printf("Journal Region Size is %d\n", storage.storageHeader.JournalRegionSize)

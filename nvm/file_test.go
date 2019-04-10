@@ -24,7 +24,11 @@ func TestFileNVMReopen(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024)
 	assert.Nil(t, err)
 
-	DefaultStorageHeader().WriteTo(nvm)
+	data := new(bytes.Buffer)
+	err = DefaultStorageHeader().WriteTo(data)
+	assert.Nil(t, err)
+	nvm.Write(align(data.Bytes()))
+	assert.Nil(t, err)
 	nvm.Sync()
 	nvm.Close()
 
@@ -33,7 +37,7 @@ func TestFileNVMReopen(t *testing.T) {
 	nvm, _, err = Open("foo-test.lusf")
 	assert.Nil(t, err)
 
-	data := bytes.NewBuffer([]byte{})
+	data = bytes.NewBuffer([]byte{})
 	err = DefaultStorageHeader().WriteTo(data)
 	assert.Nil(t, err)
 
@@ -64,8 +68,6 @@ func TestFileNVMReopen(t *testing.T) {
 
 	assert.Equal(t, 512, n)
 	assert.Equal(t, []byte("bar"), ab[headerSize:headerSize+3])
-
-	//assert_eq!(&buf[header_len..][..3], b"bar");
 
 }
 
@@ -160,7 +162,11 @@ func TestFileNVMOperations(t *testing.T) {
 func TestFileNVMDirectIO(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-dio", 1024)
 	defer os.Remove("foo-dio")
-	DefaultStorageHeader().WriteTo(nvm)
+
+	data := new(bytes.Buffer)
+	err = DefaultStorageHeader().WriteTo(data)
+	assert.Nil(t, err)
+	nvm.Write(align(data.Bytes()))
 	nvm.Sync()
 	nvm.Close()
 	//
@@ -176,7 +182,12 @@ func TestFileNVMEXLock(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-dio", 1024)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio")
-	DefaultStorageHeader().WriteTo(nvm)
+
+	data := new(bytes.Buffer)
+	err = DefaultStorageHeader().WriteTo(data)
+	assert.Nil(t, err)
+	nvm.Write(align(data.Bytes()))
+
 	nvm.Sync()
 	nvm.Close()
 

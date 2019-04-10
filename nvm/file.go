@@ -44,12 +44,6 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 	/*
-		if f, err = os.OpenFile(path, flags, 0755); err != nil {
-			return nil, errors.Wrapf(err, "failed to open file %s\n", path)
-		}
-	*/
-
-	/*
 		var metadata os.FileInfo
 		if metadata, err = f.Stat(); err != nil {
 			return nil, errors.Wrap(err, "failed to get metadata")

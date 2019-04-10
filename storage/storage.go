@@ -81,8 +81,6 @@ func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (
 	alignedBufHead.Align()
 	file.Write(alignedBufHead.AsBytes())
 
-	fmt.Printf("Len of headbuf is %d\n", alignedBufHead.Len())
-
 	if err = file.Sync(); err != nil {
 		return nil, err
 	}

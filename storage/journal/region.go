@@ -15,8 +15,9 @@ import (
 
 const (
 	GC_COUNT_IN_SIDE_JOB = 64
-	GC_QUEUE_SIZE        = 0x1000
-	SYNC_INTERVAL        = 0x1000
+	//performance related
+	GC_QUEUE_SIZE = 0x2000
+	SYNC_INTERVAL = 0x2000
 )
 
 type JournalRegion struct {
@@ -205,12 +206,16 @@ func (journal *JournalRegion) writeUnusedJournalHeader(head uint64) {
 
 func (journal *JournalRegion) fillGCQueue() {
 
+	var err error
 	if journal.ring.isEmpty() {
 		return
 	}
-	//assert (ring.unrelease_head == ring.head)
-	//fmt.Printf("update unused head to %d\n", journal.ring.head)
+
+	if err = journal.ring.Flush(); err != nil {
+		panic(fmt.Sprintf("fillGCQueue %+v", err))
+	}
 	journal.writeUnusedJournalHeader(journal.ring.head)
+
 	var i int
 	i = 0
 	iter := journal.ring.FuckIter()
@@ -229,11 +234,19 @@ func (journal *JournalRegion) fillGCQueue() {
 }
 
 func (journal *JournalRegion) Sync() {
-	if err := journal.ring.Sync(); err != nil {
+	var err error
+	if err = journal.ring.Sync(); err != nil {
 		panic(fmt.Sprintf("journal sync failed: %v", err))
 	}
-	//journal.headerRegion.WriteTo(journal.ring.unreleasedHead)
 	journal.syncCountDown = SYNC_INTERVAL
+
+	if err = journal.ring.Flush(); err != nil {
+		panic(fmt.Sprintf("journal Flush failed: %v", err))
+	}
+
+	if err = journal.headerRegion.WriteTo(journal.ring.unreleasedHead); err != nil {
+		panic(fmt.Sprintf("journal write header region failed: %v", err))
+	}
 }
 
 func (journal *JournalRegion) trySync() {

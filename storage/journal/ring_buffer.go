@@ -14,8 +14,7 @@ var _ = fmt.Print
 
 type JournalRingBuffer struct {
 	//FIXME
-	//	nvm            *JournalNvmBuffer
-	nvm            nvm.NonVolatileMemory
+	nvm            *JournalNvmBuffer
 	unreleasedHead uint64
 	head           uint64
 	tail           uint64
@@ -30,8 +29,7 @@ func (ring *JournalRingBuffer) Tail() uint64 {
 	return ring.tail
 }
 
-//func NewJournalRingBuffer(nvm *JournalNvmBuffer, head uint64) *JournalRingBuffer {
-func NewJournalRingBuffer(nvm nvm.NonVolatileMemory, head uint64) *JournalRingBuffer {
+func NewJournalRingBuffer(nvm *JournalNvmBuffer, head uint64) *JournalRingBuffer {
 	return &JournalRingBuffer{
 		nvm:            nvm,
 		unreleasedHead: head,
@@ -68,6 +66,10 @@ func (ring *JournalRingBuffer) Usage() uint64 {
 
 func (ring *JournalRingBuffer) Sync() error {
 	return ring.nvm.Sync()
+}
+
+func (ring *JournalRingBuffer) Flush() error {
+	return ring.nvm.Flush()
 }
 
 //only return embeded JournalPortion
@@ -156,29 +158,30 @@ type ReadIter struct {
 }
 
 type FuckIter struct {
-	ring    *JournalRingBuffer
+	ring *JournalRingBuffer
 }
+
 func (iter FuckIter) PopFront() (entry JournalEntry, err error) {
-        record, err := ReadRecordFrom(iter.ring.nvm)
-        if err != nil {
-                return JournalEntry{}, err
-        }
-        switch record.(type) {
-        case GoToFront:
-                iter.ring.head = 0
-                iter.ring.nvm.Seek(0, io.SeekStart)
-                return iter.PopFront()
-        case EndOfRecords:
-                //this will not update ring.head
-                return JournalEntry{}, internalerror.NoEntries
-        default:
-                entry = JournalEntry{
-                        Start:  address.AddressFromU64(iter.ring.head),
-                        Record: record,
-                }
-                iter.ring.head = entry.End()
-                return entry, nil
-        }
+	record, err := ReadRecordFrom(iter.ring.nvm)
+	if err != nil {
+		return JournalEntry{}, err
+	}
+	switch record.(type) {
+	case GoToFront:
+		iter.ring.head = 0
+		iter.ring.nvm.Seek(0, io.SeekStart)
+		return iter.PopFront()
+	case EndOfRecords:
+		//this will not update ring.head
+		return JournalEntry{}, internalerror.NoEntries
+	default:
+		entry = JournalEntry{
+			Start:  address.AddressFromU64(iter.ring.head),
+			Record: record,
+		}
+		iter.ring.head = entry.End()
+		return entry, nil
+	}
 
 }
 
@@ -272,7 +275,7 @@ func (ring *JournalRingBuffer) FuckIter() FuckIter {
 	readBuf := createSeekableReader(ring.nvm)
 	readBuf.Seek(int64(ring.head), 0)
 	return FuckIter{
-		ring:    ring,
+		ring: ring,
 	}
 }
 

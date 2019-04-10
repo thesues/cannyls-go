@@ -127,7 +127,7 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 			jb.writeBufOffset = jb.position
 			//fmt.Printf("update buf offset to %d", jb.position)
 		} else {
-			fmt.Println("here3")
+			//fmt.Println("here3")
 			jb.writeBufOffset = jb.nvm.BlockSize().FloorAlign(jb.position)
 			//fmt.Printf("update buf offset to %d", jb.position)
 			jb.writeBuf.AlignResize(uint32(jb.nvm.BlockSize().AsU16())) //resize to a sector
