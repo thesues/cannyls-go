@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
@@ -65,15 +66,26 @@ func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (
 	if err != nil {
 		return nil, err
 	}
+
+	headBuf := new(bytes.Buffer)
 	header := makeHeader(file, journal_ratio)
 
-	header.WriteHeaderRegionTo(file)
+	if err = header.WriteHeaderRegionTo(headBuf); err != nil {
+		return nil, err
+	}
+	//now headBuf's len should be at least 512
 
-	file.Sync()
+	journal.InitialJournalRegion(headBuf, file.BlockSize())
 
-	journal.InitialJournalRegion(file, file.BlockSize())
+	alignedBufHead := block.FromBytes(headBuf.Bytes(), file.BlockSize())
+	alignedBufHead.Align()
+	file.Write(alignedBufHead.AsBytes())
 
-	file.Sync()
+	fmt.Printf("Len of headbuf is %d\n", alignedBufHead.Len())
+
+	if err = file.Sync(); err != nil {
+		return nil, err
+	}
 	file.Close()
 
 	return OpenCannylsStorage(path)
@@ -100,7 +112,7 @@ func makeHeader(file nvm.NonVolatileMemory, journal_ratio float64) nvm.StorageHe
 	dataSize := totalSize - journalSize - headerSize
 	dataSize = file.BlockSize().FloorAlign(dataSize)
 	if dataSize > MAX_DATA_REGION_SIZE {
-		panic("data size is too big")
+		panic(fmt.Sprintf("data size is too big: %d", dataSize))
 	}
 
 	header := nvm.DefaultStorageHeader()

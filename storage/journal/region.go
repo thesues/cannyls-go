@@ -31,7 +31,6 @@ func (journal *JournalRegion) SetAutomaticGcMode(gc bool) {
 	journal.gcAfterAppend = gc
 }
 
-//This writer is not direct-io
 func InitialJournalRegion(writer io.Writer, sector block.BlockSize) {
 	//journal header
 	padding := sector.AsU16() - 8
@@ -107,6 +106,7 @@ func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 		}
 	}
 }
+
 func (journal *JournalRegion) append(index *lumpindex.LumpIndex, record JournalRecord) error {
 	var err error
 	var embeded portion.JournalPortion
@@ -209,7 +209,7 @@ func (journal *JournalRegion) fillGCQueue() {
 		return
 	}
 	//assert (ring.unrelease_head == ring.head)
-	fmt.Printf("update unused head to %d\n", journal.ring.head)
+	//fmt.Printf("update unused head to %d\n", journal.ring.head)
 	journal.writeUnusedJournalHeader(journal.ring.head)
 	var i int
 	i = 0

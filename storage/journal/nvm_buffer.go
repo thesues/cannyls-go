@@ -106,6 +106,7 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 	//User write in the write buffer
 	if writeBufStart <= jb.position && jb.position <= writeBufEnd {
 		//start, end is relative to the start of write buffer
+		//fmt.Println("here1")
 		start := jb.position - writeBufStart
 		end := uint32(start) + uint32(len(buf))
 		jb.writeBuf.AlignResize(end)
@@ -121,10 +122,12 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 		//prepare new buffer
 		//try to call Write again, this time, the newly created buf would be used
 		if jb.nvm.BlockSize().IsAligned(jb.position) {
+			//fmt.Println("here2")
 			jb.writeBuf.AlignResize(0)
 			jb.writeBufOffset = jb.position
 			//fmt.Printf("update buf offset to %d", jb.position)
 		} else {
+			fmt.Println("here3")
 			jb.writeBufOffset = jb.nvm.BlockSize().FloorAlign(jb.position)
 			//fmt.Printf("update buf offset to %d", jb.position)
 			jb.writeBuf.AlignResize(uint32(jb.nvm.BlockSize().AsU16())) //resize to a sector
@@ -174,7 +177,6 @@ func (jb *JournalNvmBuffer) flushWriteBuffer() error {
 		jb.writeBuf.Truncate(newLen)
 		jb.writeBufOffset += uint64(dropLen)
 	}
-
 	jb.maybeDirty = false
 	return nil
 }

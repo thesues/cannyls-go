@@ -12,6 +12,7 @@ import (
 
 var _ = fmt.Print
 
+/*
 func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 	//10M
 	_, err := CreateCannylsStorage("test.lusf", 10<<20, 0.01)
@@ -166,6 +167,7 @@ func TestCreateCannylsOverflow(t *testing.T) {
 	assert.Equal(t, uint64(784), snapshot.Tail)
 
 }
+*/
 
 /*
 26624 => 32 * 1024 NO
@@ -176,9 +178,10 @@ func TestCreateCannylsOverflow(t *testing.T) {
 */
 func TestStorageLoopForEver(t *testing.T) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf",10*1024, 0.8)
-	fmt.Printf("Journal Region Size is %d\n", storage.storageHeader.JournalRegionSize)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 20*1024, 0.8)
 	assert.Nil(t, err)
+	//storage, err := CreateCannylsStorage("tmp11.lusf", 10*1024, 0.8) test case
+	fmt.Printf("Journal Region Size is %d\n", storage.storageHeader.JournalRegionSize)
 	defer os.Remove("tmp11.lusf")
 	for i := 0; i < 50000; i++ {
 		if _, err = storage.PutEmbed(lumpidnum(i), []byte("foo")); err != nil {
@@ -194,15 +197,7 @@ func TestStorageLoopForEver(t *testing.T) {
 	}
 }
 
-func TestStorageReadLusf(t *testing.T) {
-	storage, err := OpenCannylsStorage("bad.lusf")
-	assert.Nil(t, err)
-	fmt.Printf("header %+v\n", storage.storageHeader)
-	for _, i := range storage.List() {
-		fmt.Println(i)
-	}
-
-}
+/*
 func BenchmarkStoragePutEmbeded(b *testing.B) {
 	var err error
 	storage, err := CreateCannylsStorage("bench.lusf", 8*1024, 0.8)
@@ -215,6 +210,7 @@ func BenchmarkStoragePutEmbeded(b *testing.B) {
 			fmt.Printf("ERR is %+v\n", err)
 			break
 		}
+		fmt.Printf("done for %d\n", i)
 	}
 }
 
@@ -227,6 +223,7 @@ func BenchmarkStoragePut(b *testing.B) {
 		d.Inner.Resize(42)
 	}
 }
+*/
 
 func lumpid(s string) lump.LumpId {
 	l, _ := lump.FromString(s)

@@ -40,14 +40,14 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	var err error
 	flags = os.O_CREATE | os.O_RDWR
 
+	if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
+		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
+	}
 	/*
-		if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
+		if f, err = os.OpenFile(path, flags, 0755); err != nil {
 			return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 		}
 	*/
-	if f, err = os.OpenFile(path, flags, 0755); err != nil {
-		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
-	}
 
 	/*
 		var metadata os.FileInfo
@@ -158,11 +158,9 @@ func (nvm *FileNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolati
 }
 
 func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
-	/*FIXME
 	if !block.Min().IsAligned(uint64(offset)) {
-		return offset, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d", offset)
+		return offset, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d in seek", offset)
 	}
-	*/
 
 	//abs is relative to the current FileNVM, start from 0
 	abs, err := ConvertToOffset(nvm, offset, whence)
@@ -171,7 +169,7 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	if abs > int64(nvm.Capacity()) || abs < 0 {
-		return -1, errors.Wrapf(internalerror.InvalidInput, "seek abs is wrong %d", abs)
+		return -1, errors.Wrapf(internalerror.InvalidInput, "seek abs is wrong %d in seek", abs)
 	}
 
 	realFilePosition := nvm.view_start + uint64(abs)
@@ -183,11 +181,9 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
-	/*
-		if !block.Min().IsAligned(uint64(bufLen)) {
-			return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
-		}
-	*/
+	if !block.Min().IsAligned(uint64(bufLen)) {
+		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
+	}
 
 	len := util.Min(maxLen, bufLen)
 
@@ -219,11 +215,9 @@ func (nvm *FileNVM) Write(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 	bufLen := uint64(len(buf))
 
-	/*
-		if !block.Min().IsAligned(uint64(bufLen)) {
-			return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
-		}
-	*/
+	if !block.Min().IsAligned(uint64(bufLen)) {
+		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in write", bufLen)
+	}
 
 	len := util.Min(maxLen, bufLen)
 	newPosition := nvm.cursor_position + len

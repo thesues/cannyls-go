@@ -10,7 +10,13 @@ import (
 
 var _ = fmt.Printf
 
+/*
+* On mac system, F_NOCACHE is just a hint, it will not reject non-alignned data
+* So it is required for the NVM layer to check every mem is aligned
+* https://forums.developer.apple.com/thread/25464
+ */
 func openFileWithDirectIO(name string, flag int, perm os.FileMode) (file *os.File, err error) {
+
 	file, err = os.OpenFile(name, flag, perm)
 	if err != nil {
 		return
@@ -20,14 +26,12 @@ func openFileWithDirectIO(name string, flag int, perm os.FileMode) (file *os.Fil
 	// F_NOCACHE    Turns data caching off/on. A non-zero value in arg turns data caching off.  A value
 	//              of zero in arg turns data caching on.
 	//TODO
-	/*
-		_, _, e1 := syscall.Syscall(syscall.SYS_FCNTL, uintptr(file.Fd()), syscall.F_NOCACHE, 1)
-		if e1 != 0 {
-			err = fmt.Errorf("Failed to set F_NOCACHE: %s", e1)
-			file.Close()
-			file = nil
-		}
-	*/
+	_, _, e1 := syscall.Syscall(syscall.SYS_FCNTL, uintptr(file.Fd()), syscall.F_NOCACHE, 1)
+	if e1 != 0 {
+		err = fmt.Errorf("Failed to set F_NOCACHE: %s", e1)
+		file.Close()
+		file = nil
+	}
 
 	return
 }
