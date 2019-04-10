@@ -151,12 +151,7 @@ func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
 	ring.unreleasedHead = head
 }
 
-type ReadIter struct {
-	readBuf *SeekableReader
-	ring    *JournalRingBuffer
-	current uint64
-}
-
+/*No buffer and update head*/
 type DequeueIter struct {
 	ring *JournalRingBuffer
 }
@@ -185,8 +180,14 @@ func (iter DequeueIter) PopFront() (entry JournalEntry, err error) {
 
 }
 
+/*Use buffer and update tail*/
+type BufferedIter struct {
+	readBuf *SeekableReader
+	ring    *JournalRingBuffer
+}
+
 //Update the ring.tail
-func (iter ReadIter) PopItemForRestore() (entry JournalEntry, err error) {
+func (iter BufferedIter) PopFront() (entry JournalEntry, err error) {
 	record, err := ReadRecordFrom(iter.readBuf)
 	switch record.(type) {
 	case GoToFront:
@@ -204,20 +205,22 @@ func (iter ReadIter) PopItemForRestore() (entry JournalEntry, err error) {
 		iter.ring.tail = entry.End()
 		return entry, nil
 	}
-
 }
 
-//Update the ring.head
+/*No buffer and update nothing*/
+type ReadIter struct {
+	ring *JournalRingBuffer
+}
+
+/* No buffer and update nothing */
 func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
-	record, err := ReadRecordFrom(iter.readBuf)
+	record, err := ReadRecordFrom(iter.ring.nvm)
 	if err != nil {
 		return JournalEntry{}, err
 	}
 	switch record.(type) {
 	case GoToFront:
-		iter.ring.head = 0
-		//ring.nvm.Seek(0, io.SeekStart)
-		iter.readBuf.Seek(0, io.SeekStart)
+		iter.ring.nvm.Seek(0, 0)
 		return iter.PopFront()
 	case EndOfRecords:
 		//this will not update ring.head
@@ -227,54 +230,39 @@ func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
 			Start:  address.AddressFromU64(iter.ring.head),
 			Record: record,
 		}
-		iter.ring.head = entry.End()
+		//current = entry.End()
 		return entry, nil
 	}
-
 }
 
-//do not Update the ring.head
-func (iter ReadIter) PopFrontWithoutUpdate() (entry JournalEntry, err error) {
-	record, err := ReadRecordFrom(iter.readBuf)
-	if err != nil {
-		return JournalEntry{}, err
-	}
-	switch record.(type) {
-	case GoToFront:
-		//iter.ring.head = 0
-		//ring.nvm.Seek(0, io.SeekStart)
-		iter.current = 0
-		iter.readBuf.Seek(0, io.SeekStart)
-		return iter.PopFrontWithoutUpdate()
-	case EndOfRecords:
-		//this will not update ring.head
-		return JournalEntry{}, internalerror.NoEntries
-	default:
-		entry = JournalEntry{
-			Start:  address.AddressFromU64(iter.ring.head),
-			Record: record,
-		}
-		//iter.ring.head = entry.End()
-		iter.current = entry.End()
-		return entry, nil
-	}
-
-}
-
-func (ring *JournalRingBuffer) Iter() ReadIter {
+/*Use buffer and update tail*/
+func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
 	readBuf := createSeekableReader(ring.nvm)
-	readBuf.Seek(int64(ring.head), 0)
-	return ReadIter{
-		readBuf: readBuf,
+	if _, err := readBuf.Seek(int64(ring.head), 0); err != nil {
+		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
+	}
+	return BufferedIter{
 		ring:    ring,
-		current: ring.head,
+		readBuf: readBuf,
 	}
 }
 
+/*No buffer and update head*/
 func (ring *JournalRingBuffer) DequeueIter() DequeueIter {
-	readBuf := createSeekableReader(ring.nvm)
-	readBuf.Seek(int64(ring.head), 0)
+	if _, err := ring.nvm.Seek(int64(ring.head), 0); err != nil {
+		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
+	}
 	return DequeueIter{
+		ring: ring,
+	}
+}
+
+/*No buffer and update nothing*/
+func (ring *JournalRingBuffer) ReadIter() ReadIter {
+	if _, err := ring.nvm.Seek(int64(ring.unreleasedHead), 0); err != nil {
+		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
+	}
+	return ReadIter{
 		ring: ring,
 	}
 }
@@ -287,85 +275,18 @@ type SeekableReader struct {
 func createSeekableReader(f nvm.NonVolatileMemory) *SeekableReader {
 	return &SeekableReader{
 		f:      f,
-		Reader: bufio.NewReaderSize(f, 1<<10),
+		Reader: bufio.NewReaderSize(f, 2<<10),
 	}
 }
 
-func (r *SeekableReader) Seek(offset int64, whence int) int64 {
+func (r *SeekableReader) Seek(offset int64, whence int) (off int64, err error) {
 	if whence == 1 {
 		offset -= int64(r.Buffered())
 	}
-	off, err := r.f.Seek(offset, whence)
+	off, err = r.f.Seek(offset, whence)
 	if err != nil {
-		panic("Seekable Reader can not seek")
+		return 0, err
 	}
 	r.Reset(r.f)
-	return off
-}
-
-/*
-func (ring *JournalRingBuffer) DequeueIter() *ReadEntries {
-	return NewReadEntries(ring, ring.head)
-}
-
-//https://blog.kowalczyk.info/article/1Bkr/3-ways-to-iterate-in-go.html
-type ReadEntries struct {
-	ring        *JournalRingBuffer
-	current     uint64
-	isSecondLap bool
-}
-
-func newReadEntries(ring *JournalRingBuffer, head uint64) *ReadEntries {
-	return &ReadEntries{
-		//buf:         bufio.NewReader(nvm),
-		ring:        ring,
-		current:     head,
-		isSecondLap: false,
-	}
-}
-
-//Skip GoToFront and  return nil if met EndOfRecords
-//TODO needs a bufreader
-func (reader *ReadEntries) readOneRecord() (record JournalRecord, err error) {
-	reader.ring.nvm.Seek(int64(reader.current), io.SeekStart)
-	record, err = ReadFrom(reader.ring.nvm)
-	switch record.(type) {
-	case GoToFront:
-		if reader.isSecondLap {
-			panic("is second lap")
-		}
-		reader.ring.nvm.Seek(0, io.SeekStart)
-		//reader.buf = bufio.NewReader(reader.nvm)
-		reader.current = 0
-		reader.isSecondLap = true
-		return reader.readOneRecord()
-	case EndOfRecords:
-		return nil, nil
-	default:
-		return record, err
-	}
-}
-
-//If err == internalerror.NoEntries, this is the end of the entry
-func (reader *ReadEntries) Next() (record JournalEntry, err error) {
-	record = JournalEntry{}
-	err = nil
-	r, err := reader.readOneRecord()
-	if err != nil {
-		return
-	} else if r == nil {
-		//end of records
-		err = internalerror.NoEntries
-		return
-	} else {
-		//normal
-		record = JournalEntry{
-			Start:  address.AddressFromU64(reader.current),
-			Record: r,
-		}
-		reader.current += uint64(r.ExternalSize())
-		//reader.ring.head = reader.current
-	}
 	return
 }
-*/

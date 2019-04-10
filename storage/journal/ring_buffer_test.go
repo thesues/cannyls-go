@@ -40,7 +40,7 @@ func TestRingBufferAppend(t *testing.T) {
 	var err error
 	var position uint64 = 0
 	//ring.ResetReadBufToHead()
-	iter := ring.Iter()
+	iter := ring.DequeueIter()
 	for {
 		if entry, err = iter.PopFront(); err != nil {
 			assert.Equal(t, err, internalerror.NoEntries)

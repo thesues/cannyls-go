@@ -131,7 +131,6 @@ func TestCreateCannylsStorageFullGC(t *testing.T) {
 
 }
 
-/*
 func TestCreateCannylsOverflow(t *testing.T) {
 	storage, err := CreateCannylsStorage("tmp11.lusf", 400*1024, 0.01)
 	assert.Nil(t, err)
@@ -167,15 +166,7 @@ func TestCreateCannylsOverflow(t *testing.T) {
 	assert.Equal(t, uint64(784), snapshot.Tail)
 
 }
-*/
 
-/*
-26624 => 32 * 1024 NO
-19968 => 24 * 1024 No
-=> 20 * 1024 NO
-=> 18 * 1024 OK
-13312 => 16 * 1024 OK
-*/
 func TestStorageLoopForEver(t *testing.T) {
 	var err error
 	storage, err := CreateCannylsStorage("tmp11.lusf", 64*1024*1024, 0.8)

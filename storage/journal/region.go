@@ -81,9 +81,9 @@ func OpenJournalRegion(nvm nvm.NonVolatileMemory) (*JournalRegion, error) {
 func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 	var entry JournalEntry
 	var err error
-	iter := journal.ring.Iter()
+	iter := journal.ring.BufferedIter()
 	for {
-		entry, err = iter.PopItemForRestore()
+		entry, err = iter.PopFront()
 		if err != nil {
 			if err != internalerror.NoEntries {
 				panic(fmt.Sprintf("Can not restore journal :%v", err))
@@ -318,14 +318,14 @@ func (journal *JournalRegion) gcAllEntriesInQueue(index *lumpindex.LumpIndex) {
 
 func (journal *JournalRegion) JournalEntries() (uint64, uint64, uint64, []JournalEntry) {
 	entries := make([]JournalEntry, 0)
-	iter := journal.ring.Iter()
+	iter := journal.ring.ReadIter()
 	for {
-		entry, err := iter.PopFrontWithoutUpdate()
+		entry, err := iter.PopFront()
 		if err == internalerror.NoEntries {
 			break
 		}
 		if err != nil {
-			panic(fmt.Sprintf("Journal failed to read entries"))
+			panic(fmt.Sprintf("Journal failed to read entries, %+v", err))
 		}
 		entries = append(entries, entry)
 	}
