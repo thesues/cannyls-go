@@ -188,24 +188,23 @@ func TestStorageLoopForEver(t *testing.T) {
 	}
 }
 
-/*
 func BenchmarkStoragePutEmbeded(b *testing.B) {
 	var err error
-	storage, err := CreateCannylsStorage("bench.lusf", 8*1024, 0.8)
+	storage, err := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.9)
 	if err != nil {
 		panic("failed to create bench.lusf")
 	}
 	defer os.Remove("bench.lusf")
+	data := []byte("foo")
 	for i := 0; i < b.N; i++ {
-		if _, err = storage.PutEmbed(lumpidnum(i), []byte("foo")); err != nil {
+		if _, err = storage.PutEmbed(lumpidnum(i), data); err != nil {
 			fmt.Printf("ERR is %+v\n", err)
 			break
 		}
-		fmt.Printf("done for %d\n", i)
 	}
 }
 
-func BenchmarkStoragePut(b *testing.B) {
+func BenchmarkStoragePutData(b *testing.B) {
 	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
 	defer os.Remove("bench.lusf")
 	d := zeroedData(42)
@@ -214,7 +213,6 @@ func BenchmarkStoragePut(b *testing.B) {
 		d.Inner.Resize(42)
 	}
 }
-*/
 
 func lumpid(s string) lump.LumpId {
 	l, _ := lump.FromString(s)
