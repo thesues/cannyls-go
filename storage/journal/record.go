@@ -2,6 +2,7 @@ package journal
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
@@ -12,7 +13,8 @@ import (
 	"io"
 )
 
-//TODO: pre caculate checksum for TAG_GO_FRONT, TAG_END_OF_RECORDS
+var _ = fmt.Println
+
 const (
 	TAG_END_OF_RECORDS byte = 0
 	TAG_GO_TO_FRONT    byte = 1
@@ -78,8 +80,11 @@ func (record EndOfRecords) ExternalSize() uint32 {
 }
 
 func (record EndOfRecords) CheckSum() uint32 {
-	var buf = []byte{TAG_END_OF_RECORDS}
-	return adler32.Checksum(buf)
+	/*
+		var buf = []byte{TAG_END_OF_RECORDS}
+		return adler32.Checksum(buf)
+	*/
+	return 65537
 }
 
 func (record EndOfRecords) Tag() byte {
@@ -96,8 +101,11 @@ func (record GoToFront) WriteTo(writer io.Writer) error {
 }
 
 func (record GoToFront) CheckSum() uint32 {
-	var buf = []byte{TAG_GO_TO_FRONT}
-	return adler32.Checksum(buf[:])
+	/*
+		var buf = []byte{TAG_GO_TO_FRONT}
+		return adler32.Checksum(buf[:])
+	*/
+	return 131074
 }
 
 func (record GoToFront) Tag() byte {
@@ -251,8 +259,10 @@ func (record DeleteRange) Tag() byte {
 	return TAG_DELETE_RANGE
 }
 
-//
-
+/*
+All the io.Read() should be io.ReadExact(), which means in parser, we
+expect read up 10 bytes, It must return 10 bytes, no more no less.
+*/
 func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 	checksum, tag, err := readRecordHeader(reader)
 	if err != nil {
@@ -271,7 +281,7 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 			return nil, err
 		}
 		var buf [7]byte
-		if _, err := reader.Read(buf[:]); err != nil {
+		if _, err := io.ReadFull(reader, buf[:]); err != nil {
 			return nil, err
 		}
 		dataLen := util.GetUINT16(buf[:2])
@@ -283,11 +293,14 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 			return nil, err
 		}
 
-		var dataLen uint16
-		binary.Read(reader, binary.BigEndian, &dataLen)
+		var dataLenBuf [2]byte
+		if _, err := io.ReadFull(reader, dataLenBuf[:]); err != nil {
+			return nil, err
+		}
+		dataLen := binary.BigEndian.Uint16(dataLenBuf[:])
 
 		data := make([]byte, dataLen)
-		if _, err = reader.Read(data); err != nil {
+		if _, err = io.ReadFull(reader, data); err != nil {
 			return nil, err
 		}
 		record = EmbedRecord{LumpID: lumpID, Data: data}
@@ -304,7 +317,8 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 			return nil, err
 		}
 		record = DeleteRange{Start: start, End: end}
-
+	default:
+		panic("read tag error")
 	}
 
 	if checksum != record.CheckSum() {
@@ -319,7 +333,7 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 func readLumpId(reader io.Reader) (lump.LumpId, error) {
 	//128bit
 	var buf [16]byte
-	if _, err := reader.Read(buf[:]); err != nil {
+	if _, err := io.ReadFull(reader, buf[:]); err != nil {
 		return lump.EmptyLump(), err
 	}
 	return lump.FromBytes(buf[:])
@@ -340,11 +354,14 @@ func writeRecordHeader(record JournalRecord, writer io.Writer) error {
 func readRecordHeader(reader io.Reader) (uint32, byte, error) {
 	var checksum uint32
 	var tag byte
-	if err := binary.Read(reader, binary.BigEndian, &checksum); err != nil {
-		return 0, 0, errors.Wrap(err, "read checksum failed")
+	var buf = []byte{11, 11, 11, 11, 11}
+
+	if _, err := io.ReadFull(reader, buf[:]); err != nil {
+		return 0, 0, err
 	}
-	if err := binary.Read(reader, binary.BigEndian, &tag); err != nil {
-		return 0, 0, errors.Wrap(err, "read tag failed")
-	}
+
+	checksum = binary.BigEndian.Uint32(buf[:4])
+	tag = buf[4]
+
 	return checksum, tag, nil
 }

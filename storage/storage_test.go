@@ -167,12 +167,32 @@ func TestCreateCannylsOverflow(t *testing.T) {
 
 }
 
-func TestStorageLoopForEver(t *testing.T) {
+func TestStorageLoopForEver1024(t *testing.T) {
 	var err error
 	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
 	assert.Nil(t, err)
 	//storage, err := CreateCannylsStorage("tmp11.lusf", 10*1024, 0.8) test case
 	fmt.Printf("Journal Region Size is %d\n", storage.storageHeader.JournalRegionSize)
+	defer os.Remove("tmp11.lusf")
+	for i := 0; i < 50000; i++ {
+		if _, err = storage.PutEmbed(lumpidnum(i), []byte("foo")); err != nil {
+			fmt.Printf("%+v", err)
+			break
+		}
+
+		if _, err = storage.Delete(lumpidnum(i)); err != nil {
+			fmt.Printf("%+v", err)
+			break
+
+		}
+	}
+}
+
+//slow
+func TestStorageLoopForEver32(t *testing.T) {
+	var err error
+	storage, err := CreateCannylsStorage("tmp11.lusf", 32*1024, 0.8)
+	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 	for i := 0; i < 50000; i++ {
 		if _, err = storage.PutEmbed(lumpidnum(i), []byte("foo")); err != nil {

@@ -300,8 +300,3 @@ func (r *SeekableReader) Seek(offset int64, whence int) (off int64, err error) {
 	r.Reset(r.f)
 	return
 }
-
-//use io.ReadFull
-func (r *SeekableReader) Read(p []byte) (n int, err error) {
-	return io.ReadFull(r.Reader, p)
-}
