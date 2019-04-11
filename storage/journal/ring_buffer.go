@@ -153,18 +153,24 @@ func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
 
 /*No buffer and update head*/
 type DequeueIter struct {
-	ring *JournalRingBuffer
+	readBuf      *SeekableReader
+	ring         *JournalRingBuffer
+	isSecondLoop bool
 }
 
 func (iter DequeueIter) PopFront() (entry JournalEntry, err error) {
-	record, err := ReadRecordFrom(iter.ring.nvm)
+	record, err := ReadRecordFrom(iter.readBuf)
 	if err != nil {
 		return JournalEntry{}, err
 	}
 	switch record.(type) {
 	case GoToFront:
+		if iter.isSecondLoop == true {
+			panic("has two GoToFront in journal")
+		}
 		iter.ring.head = 0
-		iter.ring.nvm.Seek(0, io.SeekStart)
+		iter.readBuf.Seek(0, io.SeekStart)
+		iter.isSecondLoop = true
 		return iter.PopFront()
 	case EndOfRecords:
 		//this will not update ring.head
@@ -235,7 +241,7 @@ func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
 	}
 }
 
-/*Use buffer and update tail*/
+/*Use Buffer and update tail*/
 func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
 	readBuf := createSeekableReader(ring.nvm)
 	if _, err := readBuf.Seek(int64(ring.head), 0); err != nil {
@@ -247,13 +253,17 @@ func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
 	}
 }
 
-/*No buffer and update head*/
+/*User Buffer and update head*/
 func (ring *JournalRingBuffer) DequeueIter() DequeueIter {
-	if _, err := ring.nvm.Seek(int64(ring.head), 0); err != nil {
+	readBuf := createSeekableReader(ring.nvm)
+	if _, err := readBuf.Seek(int64(ring.head), 0); err != nil {
 		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
 	}
+
 	return DequeueIter{
-		ring: ring,
+		ring:         ring,
+		readBuf:      readBuf,
+		isSecondLoop: false,
 	}
 }
 
@@ -275,7 +285,7 @@ type SeekableReader struct {
 func createSeekableReader(f nvm.NonVolatileMemory) *SeekableReader {
 	return &SeekableReader{
 		f:      f,
-		Reader: bufio.NewReaderSize(f, 2<<10),
+		Reader: bufio.NewReaderSize(f, 16*1024),
 	}
 }
 
@@ -289,4 +299,9 @@ func (r *SeekableReader) Seek(offset int64, whence int) (off int64, err error) {
 	}
 	r.Reset(r.f)
 	return
+}
+
+//use io.ReadFull
+func (r *SeekableReader) Read(p []byte) (n int, err error) {
+	return io.ReadFull(r.Reader, p)
 }

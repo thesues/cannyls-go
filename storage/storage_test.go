@@ -169,7 +169,7 @@ func TestCreateCannylsOverflow(t *testing.T) {
 
 func TestStorageLoopForEver(t *testing.T) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf", 64*1024*1024, 0.8)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
 	assert.Nil(t, err)
 	//storage, err := CreateCannylsStorage("tmp11.lusf", 10*1024, 0.8) test case
 	fmt.Printf("Journal Region Size is %d\n", storage.storageHeader.JournalRegionSize)
