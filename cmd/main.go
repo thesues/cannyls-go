@@ -27,6 +27,93 @@ func createCannyls(c *cli.Context) error {
 	return nil
 }
 
+func headerCannyls(c *cli.Context) (err error) {
+	path := c.String("storage")
+	store, err := storage.OpenCannylsStorage(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	header := store.Header()
+	fmt.Println("===cannyls header===")
+	fmt.Printf("Block Size %d \n", header.BlockSize.AsU16())
+	fmt.Printf("Version %d %d \n", header.MajorVersion, header.MinorVersion)
+	fmt.Printf("Journal Region Size %d\n", header.JournalRegionSize)
+	fmt.Printf("Data    Region Size %d\n", header.DataRegionSize)
+	return
+}
+
+func deleteCannyls(c *cli.Context) (err error) {
+	path := c.String("storage")
+	store, err := storage.OpenCannylsStorage(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	key := c.Uint64("key")
+	id := lump.FromU64(0, key)
+	if _, err = store.Delete(id); err != nil {
+		return err
+	}
+
+	fmt.Printf("id %s is deleted\n", id.String())
+	return
+}
+
+func dumpCannyls(c *cli.Context) (err error) {
+	path := c.String("storage")
+	store, err := storage.OpenCannylsStorage(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	ids := store.List()
+	for _, id := range ids {
+		d, err := store.Get(id)
+		if err != nil {
+			break
+		}
+
+		fmt.Printf("%s :%s\n", id.String(), string(d))
+	}
+	return
+}
+
+func journalGCCannyls(c *cli.Context) (err error) {
+	path := c.String("storage")
+	store, err := storage.OpenCannylsStorage(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	store.JournalGC()
+	fmt.Println("Journal Full GC completed")
+	return
+}
+
+func journalCannyls(c *cli.Context) (err error) {
+	path := c.String("storage")
+	store, err := storage.OpenCannylsStorage(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	snap := store.JournalSnapshot()
+	fmt.Printf("unused header :%d\n", snap.UnreleasedHead)
+	fmt.Printf("header        :%d\n", snap.Head)
+	fmt.Printf("tail          :%d\n", snap.Tail)
+
+	for _, entry := range snap.Entries {
+		fmt.Printf("<%+v>\n", entry)
+	}
+	return
+}
+
 func putCannyls(c *cli.Context) (err error) {
 	path := c.String("storage")
 	store, err := storage.OpenCannylsStorage(path)
@@ -90,6 +177,7 @@ func readUpData(r io.Reader, lumpdata lump.LumpData) error {
 }
 
 func main() {
+
 	app := cli.NewApp()
 	app.Name = "kanils"
 	app.Usage = "kanils subcommand"
@@ -105,7 +193,7 @@ func main() {
 		},
 		{
 			Name:  "put",
-			Usage: "put data into cannyls",
+			Usage: "put --storage path --key key --value value",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
 				cli.Uint64Flag{Name: "key"},
@@ -113,12 +201,47 @@ func main() {
 			},
 			Action: putCannyls,
 		},
-		/*
-			{
-				Name: "dump",
-			}
-		*/
-
+		{
+			Name:  "dump",
+			Usage: "dump --storage path",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "storage"},
+			},
+			Action: dumpCannyls,
+		},
+		{
+			Name:  "delete",
+			Usage: "put --storage path --key key",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "storage"},
+				cli.Uint64Flag{Name: "key"},
+			},
+			Action: deleteCannyls,
+		},
+		{
+			Name:  "journal",
+			Usage: "journal --storage path",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "storage"},
+			},
+			Action: journalCannyls,
+		},
+		{
+			Name:  "gc",
+			Usage: "gc --storage path",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "storage"},
+			},
+			Action: journalGCCannyls,
+		},
+		{
+			Name:  "header",
+			Usage: "header --storage path",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "storage"},
+			},
+			Action: headerCannyls,
+		},
 	}
 	app.Run(os.Args)
 }

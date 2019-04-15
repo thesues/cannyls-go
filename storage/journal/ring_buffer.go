@@ -195,6 +195,9 @@ type BufferedIter struct {
 //Update the ring.tail
 func (iter BufferedIter) PopFront() (entry JournalEntry, err error) {
 	record, err := ReadRecordFrom(iter.readBuf)
+	if err != nil {
+		return JournalEntry{}, err
+	}
 	switch record.(type) {
 	case GoToFront:
 		iter.ring.tail = 0

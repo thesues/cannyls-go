@@ -147,8 +147,8 @@ func (record PutRecord) CheckSum() uint32 {
 	offset, len := record.DataPortion.AsInts() //offset is always 40bit wide
 	// uint40 + uint16 = 7 bytes
 	var buf [7]byte
-	util.PutUINT40(buf[:5], offset) //40bit
-	util.PutUINT16(buf[5:], len)    //16bit
+	util.PutUINT16(buf[:2], len)    //16bit
+	util.PutUINT40(buf[2:], offset) //40bit
 	hash.Write(buf[:])
 	return hash.Sum32()
 }
@@ -323,7 +323,7 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 
 	if checksum != record.CheckSum() {
 		return nil, errors.Wrapf(internalerror.StorageCorrupted,
-			"tag: %d, on checksum disk: %d , mem: %+v", tag, checksum, record)
+			"tag: %d, on checksum disk: %d , computed %d, mem: %+v", tag, checksum, record.CheckSum(), record)
 	}
 
 	return record, nil
