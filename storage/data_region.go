@@ -67,6 +67,7 @@ func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 
 	required_blocks := region.shiftBlockSize(data.Inner.Len())
 	data_portion, err := region.allocator.Allocate(uint16(required_blocks))
+
 	if err != nil {
 		return portion.DataPortion{}, err
 	}

@@ -139,19 +139,26 @@ func (Journal *JournalRegion) isGarbage(index *lumpindex.LumpIndex, entry Journa
 	var journalPortion portion.JournalPortion
 	var p portion.Portion
 	var err error
+	var ok bool
 	record := entry.Record.(JournalRecord)
 	switch v := record.(type) {
 	case PutRecord:
 		if p, err = index.Get(v.LumpID); err != nil {
 			return true
 		}
-		dataPortion = p.(portion.DataPortion)
+
+		if dataPortion, ok = p.(portion.DataPortion); !ok {
+			return true
+		}
+
 		return dataPortion != v.DataPortion
 	case EmbedRecord:
 		if p, err = index.Get(v.LumpID); err != nil {
 			return true
 		}
-		journalPortion = p.(portion.JournalPortion)
+		if journalPortion, ok = p.(portion.JournalPortion); !ok {
+			return true
+		}
 		if journalPortion.Start == entry.Start+EMBEDDED_DATA_OFFSET && int(journalPortion.Len) == len(v.Data) {
 			return false
 		} else {
@@ -239,10 +246,6 @@ func (journal *JournalRegion) Sync() {
 		panic(fmt.Sprintf("journal sync failed: %v", err))
 	}
 	journal.syncCountDown = SYNC_INTERVAL
-
-	if err = journal.ring.Flush(); err != nil {
-		panic(fmt.Sprintf("journal Flush failed: %v", err))
-	}
 
 	if err = journal.headerRegion.WriteTo(journal.ring.unreleasedHead); err != nil {
 		panic(fmt.Sprintf("journal write header region failed: %v", err))

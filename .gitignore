@@ -1,4 +1,5 @@
 .vscode
+*.lusf
 *.out
 *.log
 *.test

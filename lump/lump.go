@@ -39,7 +39,7 @@ func EmptyLump() LumpId {
 
 //lump data
 const (
-	LUMP_MAX_SIZE     = 0xFFFF * (512 - 2)
+	LUMP_MAX_SIZE     = 0xFFFF*(512) - 2
 	MAX_EMBEDDED_SIZE = 0xFFFF
 )
 

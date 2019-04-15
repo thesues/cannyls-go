@@ -78,7 +78,7 @@ func (ring *JournalRingBuffer) Enqueue(record JournalRecord) (jportion portion.J
 	err = nil
 	//1. check usage
 	if ring.checkFreeSpace(record) == false {
-		err = internalerror.StorageFull
+		err = internalerror.JournalStorageFull
 		return
 	}
 

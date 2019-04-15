@@ -182,6 +182,7 @@ func (alloc *DataPortionAllocator) RestoreFromIndex(blockSize block.BlockSize,
 			free := portion.NewFreePortion(start, uint32(size))
 			alloc.addFreePortion(free)
 		}
+		tail = p.Start.AsU64()
 	}
 
 }

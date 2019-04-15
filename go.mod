@@ -14,6 +14,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/stamblerre/gocode v0.0.0-20190327203809-810592086997 // indirect
 	github.com/stretchr/testify v1.3.0
+	github.com/urfave/cli v1.20.0
 	golang.org/x/arch v0.0.0-20190312162104-788fe5ffcd8c // indirect
 	golang.org/x/tools v0.0.0-20190328211700-ab21143f2384 // indirect
 )
