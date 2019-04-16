@@ -227,8 +227,8 @@ func BenchmarkStoragePutEmbeded(b *testing.B) {
 func BenchmarkStoragePutData(b *testing.B) {
 	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
 	defer os.Remove("bench.lusf")
-	d := zeroedData(42)
 	for i := 0; i < b.N; i++ {
+		d := zeroedData(42)
 		storage.Put(lumpidnum(i), d)
 		d.Inner.Resize(42)
 	}
