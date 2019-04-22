@@ -124,14 +124,18 @@ func wrbenchCannyls(c *cli.Context) (err error) {
 }
 
 func benchCannyls(c *cli.Context, read bool) (err error) {
-	count := c.Uint("count")
-	size := c.Uint("size")
+
+	count := c.Uint64("count")
+	size := c.Uint64("size")
+	if count == 0 || size == 0 {
+		return errors.New("argu count or size is zero")
+	}
 	store, err := createCannylsForBench(c)
 	if err != nil {
 		return
 	}
 	defer store.Close()
-	var i uint
+	var i uint64
 	start := time.Now()
 	marching := 100
 	m := 0
@@ -139,8 +143,14 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 	for i = 0; i < count; i++ {
 		id := lump.FromU64(0, uint64(i))
 		data := fillData(int(size))
-		if _, err = store.Put(id, data); err != nil {
-			return
+		if size > (4 << 10) {
+			if _, err = store.Put(id, data); err != nil {
+				return
+			}
+		} else {
+			if _, err = store.PutEmbed(id, data.AsBytes()); err != nil {
+				return
+			}
 		}
 
 		if read {
@@ -158,18 +168,19 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 		}
 	}
 
-	fmt.Printf("total = {%s}Byte, elapsed = {%+v}\n", bytesToString(size*count), time.Now().Sub(start))
+	fmt.Printf("total = {%s}Byte, elapsed = {%+v}\n", bytesToString(uint64(size)*uint64(count)), time.Now().Sub(start))
 	return
 }
 
 func createCannylsForBench(c *cli.Context) (store *storage.Storage, err error) {
 
-	size := c.Uint("size")
-	count := c.Uint("count")
+	size := c.Uint64("size")
+	count := c.Uint64("count")
 	path := c.String("storage")
 
-	capacityBytes := block.Min().CeilAlign(uint64(size * count * 2))
+	capacityBytes := block.Min().CeilAlign(size * count * 2)
 
+	fmt.Printf("create cannyls... capacity is %s\n", bytesToString(capacityBytes))
 	store, err = storage.CreateCannylsStorage(path, capacityBytes, 0.01)
 	if err != nil {
 		return
@@ -265,8 +276,8 @@ func main() {
 	app.Usage = "kanils subcommand"
 	app.Commands = []cli.Command{
 		{
-			Name:  "Create",
-			Usage: "Create cannyls",
+			Name:  "create",
+			Usage: "create --storage <path> --capacity <size>",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
 				cli.Uint64Flag{Name: "capacity"},
@@ -338,8 +349,8 @@ func main() {
 			Usage: "WBench --storage path",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
-				cli.UintFlag{Name: "count"},
-				cli.StringFlag{Name: "size"},
+				cli.Uint64Flag{Name: "count"},
+				cli.Uint64Flag{Name: "size"},
 			},
 			Action: wbenchCannyls,
 		},
@@ -348,8 +359,8 @@ func main() {
 			Usage: "WRBench --storage path",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
-				cli.UintFlag{Name: "count"},
-				cli.StringFlag{Name: "size"},
+				cli.Uint64Flag{Name: "count"},
+				cli.Uint64Flag{Name: "size"},
 			},
 			Action: wrbenchCannyls,
 		},
@@ -369,7 +380,7 @@ func fillData(size int) lump.LumpData {
 	return lumpData
 }
 
-func bytesToString(size uint) string {
+func bytesToString(size uint64) string {
 	//KB, MB, GB, TB
 	units := []string{"B", "KB", "MB", "GB", "TB"}
 	i := size

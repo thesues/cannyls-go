@@ -62,6 +62,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 }
 
 func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (*Storage, error) {
+
 	file, err := nvm.CreateIfAbsent(path, capacity)
 	if err != nil {
 		return nil, err
@@ -76,6 +77,7 @@ func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (
 	//now headBuf's len should be at least 512
 
 	journal.InitialJournalRegion(headBuf, file.BlockSize())
+	//headbuf should be header(512) + (journal header)512 + (journal)512
 
 	alignedBufHead := block.FromBytes(headBuf.Bytes(), file.BlockSize())
 	alignedBufHead.Align()
@@ -96,7 +98,7 @@ func makeHeader(file nvm.NonVolatileMemory, journal_ratio float64) nvm.StorageHe
 	headerSize := file.BlockSize().CeilAlign(uint64(nvm.FULL_HEADER_SIZE))
 
 	//check capacity
-	if totalSize < headerSize {
+	if totalSize < headerSize+uint64(file.BlockSize().AsU16()*3) {
 		panic("file size is too small")
 	}
 
@@ -107,10 +109,18 @@ func makeHeader(file nvm.NonVolatileMemory, journal_ratio float64) nvm.StorageHe
 		panic("journal size is too big")
 	}
 
+	if journalSize < uint64(file.BlockSize().AsU16()*2) {
+		journalSize = uint64(file.BlockSize().AsU16() * 2)
+	}
+
 	dataSize := totalSize - journalSize - headerSize
 	dataSize = file.BlockSize().FloorAlign(dataSize)
 	if dataSize > MAX_DATA_REGION_SIZE {
 		panic(fmt.Sprintf("data size is too big: %d", dataSize))
+	}
+
+	if dataSize < uint64(file.BlockSize().AsU16()) {
+		dataSize = uint64(file.BlockSize().AsU16())
 	}
 
 	header := nvm.DefaultStorageHeader()

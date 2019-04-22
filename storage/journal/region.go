@@ -33,12 +33,14 @@ func (journal *JournalRegion) SetAutomaticGcMode(gc bool) {
 }
 
 func InitialJournalRegion(writer io.Writer, sector block.BlockSize) {
-	//journal header
+	//journal header, in sector one
 	padding := sector.AsU16() - 8
 	var buf = make([]byte, padding)
-	binary.Write(writer, binary.BigEndian, uint64(0))
 	writer.Write(buf)
 
+	binary.Write(writer, binary.BigEndian, uint64(0))
+
+	//first record in sector two
 	r := EndOfRecords{}
 	if err := r.WriteTo(writer); err != nil {
 		panic("failed to initialize JournalRegion")
@@ -271,6 +273,9 @@ func (journal *JournalRegion) RecordPut(index *lumpindex.LumpIndex, id lump.Lump
 
 //WARNING: this will update the INDEX
 func (journal *JournalRegion) RecordEmbed(index *lumpindex.LumpIndex, id lump.LumpId, data []byte) error {
+	if len(data) > lump.MAX_EMBEDDED_SIZE {
+		return internalerror.InvalidInput
+	}
 	record := EmbedRecord{
 		LumpID: id,
 		Data:   data,
