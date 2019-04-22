@@ -276,8 +276,8 @@ func main() {
 	app.Usage = "kanils subcommand"
 	app.Commands = []cli.Command{
 		{
-			Name:  "create",
-			Usage: "create --storage <path> --capacity <size>",
+			Name:  "Create",
+			Usage: "Create --storage <path> --capacity <size>",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
 				cli.Uint64Flag{Name: "capacity"},
