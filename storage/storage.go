@@ -142,6 +142,10 @@ func (store *Storage) List() []lump.LumpId {
 	return store.index.List()
 }
 
+func (store *Storage) MinId() (lump.LumpId, bool) {
+	return store.index.Min()
+}
+
 func (store *Storage) JournalGC() {
 	store.journalRegion.GcAllEntries(store.index)
 }

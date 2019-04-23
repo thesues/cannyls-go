@@ -97,6 +97,19 @@ func (index *LumpIndex) List() []lump.LumpId {
 	return vec
 }
 
+func (index *LumpIndex) Min() (id lump.LumpId, ok bool) {
+	ok = false
+	item := index.tree.Min()
+	if item == nil {
+		ok = false
+		return
+	}
+	a := item.(internalItem)
+	id = a.id
+	ok = true
+	return
+}
+
 //bugy, the returned slice could be very large, should not be used production
 func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.LumpId {
 	vec := make([]lump.LumpId, 0, 100)

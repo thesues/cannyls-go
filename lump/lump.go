@@ -86,6 +86,12 @@ func NewLumpDataEmbedded(buf []byte) (*LumpData, error) {
 
 //TODO, to be aligned at upper
 func NewLumpDataAligned(size int, blockSize block.BlockSize) LumpData {
+
+	if size > LUMP_MAX_SIZE {
+		return LumpData{
+			Inner: nil,
+		}
+	}
 	ab := block.NewAlignedBytes(size, blockSize)
 	return LumpData{
 		Inner: ab,
