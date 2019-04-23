@@ -127,6 +127,7 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 
 	count := c.Uint64("count")
 	size := c.Uint64("size")
+	always := c.Bool("always")
 	if count == 0 || size == 0 {
 		return errors.New("argu count or size is zero")
 	}
@@ -143,7 +144,7 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 	for i = 0; i < count; i++ {
 		id := lump.FromU64(0, uint64(i))
 		data := fillData(int(size))
-		if size > (4 << 10) {
+		if size > (4<<10) || always {
 			if _, err = store.Put(id, data); err != nil {
 				return
 			}
@@ -351,6 +352,7 @@ func main() {
 				cli.StringFlag{Name: "storage"},
 				cli.Uint64Flag{Name: "count"},
 				cli.Uint64Flag{Name: "size"},
+				cli.BoolTFlag{Name: "always"},
 			},
 			Action: wbenchCannyls,
 		},
@@ -361,6 +363,7 @@ func main() {
 				cli.StringFlag{Name: "storage"},
 				cli.Uint64Flag{Name: "count"},
 				cli.Uint64Flag{Name: "size"},
+				cli.BoolTFlag{Name: "always"},
 			},
 			Action: wrbenchCannyls,
 		},
@@ -386,7 +389,7 @@ func bytesToString(size uint64) string {
 	i := size
 	s := 0
 	for i > 1024 {
-		if s == len(units) {
+		if s == len(units)-1 {
 			break
 		}
 		i = i >> 10
