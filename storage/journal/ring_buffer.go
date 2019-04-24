@@ -248,7 +248,7 @@ func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
 
 /*Use Buffer and update tail*/
 func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
-	ra, err := readahead.NewReadSeekerSize(ring.nvm, 4, 8<<20)
+	ra, err := readahead.NewReadSeekerSize(ring.nvm, 4, 1<<20)
 	if err != nil {
 		panic("should not happen in create readahead buf")
 	}
