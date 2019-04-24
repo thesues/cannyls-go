@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
+	"runtime"
 )
 
 var _ = fmt.Sprintf
@@ -66,6 +68,27 @@ func TestLumpIndexDelete(t *testing.T) {
 }
 
 //helper
+
+const N int64 = 10000000
+
+func TestSpace(t *testing.T) {
+	var msb, msa runtime.MemStats
+	runtime.ReadMemStats(&msb)
+
+	tree := NewIndex()
+	var i uint64
+	for i = 0; i < uint64(N); i++ {
+		id := lump.FromU64(0, i)
+		tree.InsertDataPortion(id, portion.NewDataPortion(64, 64))
+	}
+
+	p := tree.DataPortions()
+
+	fmt.Println(p[N/2])
+
+	runtime.ReadMemStats(&msa)
+	fmt.Printf("LUMP Index %0.0f MiB allocated for %s\n", float64(msa.Alloc-msb.Alloc)/float64(1<<20), humanize.Comma(N))
+}
 
 func lumpid(s string) lump.LumpId {
 	l, _ := lump.FromString(s)

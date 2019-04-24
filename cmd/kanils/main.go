@@ -123,6 +123,13 @@ func wrbenchCannyls(c *cli.Context) (err error) {
 	return benchCannyls(c, true)
 }
 
+/*
+./kanils WRBench --storage /mnt/catcannyls/4kbench.lusf --size 4096 --count 549755813
+total = {2TB}Byte, elapsed = {14h18m17.387808585s}
+takes 61GB
+throughput :40 + 60 MB/s
+iops :9K
+*/
 func benchCannyls(c *cli.Context, read bool) (err error) {
 
 	count := c.Uint64("count")

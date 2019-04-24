@@ -21,8 +21,8 @@ type DataPortionAllocator struct {
 func New() *DataPortionAllocator {
 	freeList := btree.NewFreeList(32)
 	return &DataPortionAllocator{
-		sizeToFree: btree.NewWithFreeList(2, freeList),
-		endToFree:  btree.NewWithFreeList(2, freeList),
+		sizeToFree: btree.NewWithFreeList(32, freeList),
+		endToFree:  btree.NewWithFreeList(32, freeList),
 	}
 }
 
@@ -160,7 +160,7 @@ func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (
 }
 
 func (alloc *DataPortionAllocator) RestoreFromIndex(blockSize block.BlockSize,
-	capacityInByte uint64, vec []*portion.DataPortion) {
+	capacityInByte uint64, vec []portion.DataPortion) {
 
 	//sort the slice reverse
 	sort.Slice(vec, func(i, j int) bool {

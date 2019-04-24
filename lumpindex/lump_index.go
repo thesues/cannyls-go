@@ -1,6 +1,7 @@
 package lumpindex
 
 import (
+	"fmt"
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
@@ -14,8 +15,11 @@ import (
 	https://stackoverflow.com/questions/28024884/does-a-type-assertion-type-switch-have-bad-performance-is-slow-in-go
 */
 
+var _ = fmt.Println
+
 type LumpIndex struct {
-	tree *btree.BTree
+	tree  *btree.BTree
+	count uint64
 }
 
 type internalItem struct {
@@ -24,8 +28,9 @@ type internalItem struct {
 }
 
 func NewIndex() *LumpIndex {
+	free := btree.NewFreeList(1024)
 	return &LumpIndex{
-		tree: btree.New(32),
+		tree: btree.NewWithFreeList(128, free),
 	}
 }
 func (index *LumpIndex) Get(id lump.LumpId) (p portion.Portion, err error) {
@@ -43,19 +48,28 @@ func (index *LumpIndex) InsertDataPortion(id lump.LumpId, data portion.DataPorti
 	var n uint64 = 0
 	n = data.Start.AsU64() | uint64(data.Len)<<40 | 1<<63
 	key := internalItem{id: id, n: n}
-	index.tree.ReplaceOrInsert(key)
+	updated := index.tree.ReplaceOrInsert(key)
+	if updated == nil {
+		index.count++
+	}
 }
 
 func (index *LumpIndex) InsertJournalPortion(id lump.LumpId, data portion.JournalPortion) {
 	var n uint64 = 0
 	n = data.Start.AsU64() | uint64(data.Len)<<40
 	key := internalItem{id: id, n: n}
-	index.tree.ReplaceOrInsert(key)
+	updated := index.tree.ReplaceOrInsert(key)
+	if updated == nil {
+		index.count++
+	}
 }
 
 func (index *LumpIndex) Delete(id lump.LumpId) portion.Portion {
 	key := internalItem{id: id, n: 0}
 	item := index.tree.Delete(key)
+	if item != nil {
+		index.count--
+	}
 
 	return fromItemToPortion(item)
 }
@@ -123,18 +137,17 @@ func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.Lum
 	return vec
 }
 
-func (index *LumpIndex) DataPortions() []*portion.DataPortion {
-	vec := make([]*portion.DataPortion, 1)
+func (index *LumpIndex) DataPortions() []portion.DataPortion {
+	vec := make([]portion.DataPortion, 1, index.count+1)
 
 	sentinel := portion.NewDataPortion(0, 0)
-	vec[0] = &sentinel
+	vec[0] = sentinel
 	index.tree.Ascend(func(a btree.Item) bool {
 		item := a.(internalItem)
 		if (item.n >> 63) == 1 {
 			len := uint16(item.n >> 40 & 0xFFFF)
 			start := item.n & (address.MAX_ADDRESS)
-			p := portion.NewDataPortion(start, len)
-			vec = append(vec, &p)
+			vec = append(vec, portion.NewDataPortion(start, len))
 		}
 		return true
 	})

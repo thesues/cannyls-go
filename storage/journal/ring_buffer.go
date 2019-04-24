@@ -246,7 +246,7 @@ func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
 
 /*Use Buffer and update tail*/
 func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
-	readBuf := createSeekableReader(ring.nvm)
+	readBuf := createSeekableReader(ring.nvm, 8*1024*1024)
 	if _, err := readBuf.Seek(int64(ring.head), 0); err != nil {
 		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
 	}
@@ -258,7 +258,7 @@ func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
 
 /*User Buffer and update head*/
 func (ring *JournalRingBuffer) DequeueIter() DequeueIter {
-	readBuf := createSeekableReader(ring.nvm)
+	readBuf := createSeekableReader(ring.nvm, 8*1024)
 	if _, err := readBuf.Seek(int64(ring.head), 0); err != nil {
 		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
 	}
@@ -285,10 +285,10 @@ type SeekableReader struct {
 	*bufio.Reader
 }
 
-func createSeekableReader(f nvm.NonVolatileMemory) *SeekableReader {
+func createSeekableReader(f nvm.NonVolatileMemory, capacity int) *SeekableReader {
 	return &SeekableReader{
 		f:      f,
-		Reader: bufio.NewReaderSize(f, 16*1024),
+		Reader: bufio.NewReaderSize(f, capacity),
 	}
 }
 
