@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/klauspost/readahead"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/nvm"
@@ -189,7 +190,7 @@ func (iter DequeueIter) PopFront() (entry JournalEntry, err error) {
 
 /*Use buffer and update tail*/
 type BufferedIter struct {
-	readBuf *SeekableReader
+	readBuf io.ReadSeeker
 	ring    *JournalRingBuffer
 }
 
@@ -247,13 +248,17 @@ func (iter ReadIter) PopFront() (entry JournalEntry, err error) {
 
 /*Use Buffer and update tail*/
 func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
-	readBuf := createSeekableReader(ring.nvm, 8*1024*1024)
-	if _, err := readBuf.Seek(int64(ring.head), 0); err != nil {
+	ra, err := readahead.NewReadSeekerSize(ring.nvm, 4, 8<<20)
+	if err != nil {
+		panic("should not happen in create readahead buf")
+	}
+
+	if _, err := ra.Seek(int64(ring.head), 0); err != nil {
 		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
 	}
 	return BufferedIter{
 		ring:    ring,
-		readBuf: readBuf,
+		readBuf: ra,
 	}
 }
 
