@@ -135,6 +135,8 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 	count := c.Uint64("count")
 	size := c.Uint64("size")
 	always := c.Bool("always")
+	sync := c.Bool("sync")
+
 	if count == 0 || size == 0 {
 		return errors.New("argu count or size is zero")
 	}
@@ -159,6 +161,9 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 			if _, err = store.PutEmbed(id, data.AsBytes()); err != nil {
 				return
 			}
+		}
+		if sync {
+			store.JournalSync()
 		}
 
 		if read {
@@ -360,6 +365,7 @@ func main() {
 				cli.Uint64Flag{Name: "count"},
 				cli.Uint64Flag{Name: "size"},
 				cli.BoolTFlag{Name: "always"},
+				cli.BoolTFlag{Name: "sync"},
 			},
 			Action: wbenchCannyls,
 		},
@@ -371,6 +377,7 @@ func main() {
 				cli.Uint64Flag{Name: "count"},
 				cli.Uint64Flag{Name: "size"},
 				cli.BoolTFlag{Name: "always"},
+				cli.BoolTFlag{Name: "sync"},
 			},
 			Action: wrbenchCannyls,
 		},

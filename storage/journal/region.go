@@ -248,10 +248,6 @@ func (journal *JournalRegion) Sync() {
 		panic(fmt.Sprintf("journal sync failed: %v", err))
 	}
 	journal.syncCountDown = SYNC_INTERVAL
-
-	if err = journal.headerRegion.WriteTo(journal.ring.unreleasedHead); err != nil {
-		panic(fmt.Sprintf("journal write header region failed: %v", err))
-	}
 }
 
 func (journal *JournalRegion) trySync() {
