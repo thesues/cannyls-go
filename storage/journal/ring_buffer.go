@@ -3,11 +3,12 @@ package journal
 import (
 	"bufio"
 	"fmt"
+	"io"
+
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
-	"io"
 )
 
 var _ = fmt.Print

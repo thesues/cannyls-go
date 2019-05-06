@@ -1,8 +1,9 @@
 package lump
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLumpIDFromString(t *testing.T) {
@@ -13,15 +14,15 @@ func TestLumpIDFromString(t *testing.T) {
 func TestLumpID(t *testing.T) {
 	lid, err := FromString("A1")
 	assert.Nil(t, err)
-	assert.Equal(t, "000000000000000000000000000000a1", lid.String())
+	assert.Equal(t, "a1", lid.String())
 
 	left := FromU64(0, 10)
 
 	right, err := FromString("0A")
 	assert.Nil(t, err)
 
-	var buf [16]byte
-	buf[15] = 10
+	var buf [8]byte
+	buf[7] = 10
 	mid, err := FromBytes(buf[:])
 	assert.Nil(t, err)
 

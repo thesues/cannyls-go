@@ -2,12 +2,13 @@ package nvm
 
 import (
 	"encoding/binary"
-	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
-	"github.com/thesues/cannyls-go/block"
-	"github.com/thesues/cannyls-go/internalerror"
 	"io"
 	"os"
+
+	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
+	"github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/internalerror"
 )
 
 /*
@@ -85,7 +86,7 @@ func ReadFrom(reader io.Reader) (*StorageHeader, error) {
 	//header size
 	var headerSize uint16
 	if err := binary.Read(reader, binary.BigEndian, &headerSize); err != nil {
-		return nil, internalerror.InvalidInput
+		return nil, errors.Wrap(internalerror.InvalidInput, "read header size failed")
 	}
 
 	reader = io.LimitReader(reader, int64(headerSize))
@@ -94,17 +95,17 @@ func ReadFrom(reader io.Reader) (*StorageHeader, error) {
 
 	var majorVersion uint16
 	if err := binary.Read(reader, binary.BigEndian, &majorVersion); err != nil {
-		return nil, internalerror.InvalidInput
+		return nil, errors.Wrap(internalerror.InvalidInput, "read major vesion failed")
 	} else if majorVersion != MAJOR_VERSION {
-		return nil, internalerror.InvalidInput
+		return nil, errors.Wrapf(internalerror.InvalidInput, "read major verion not match: %v", majorVersion)
 	}
 
 	// minor version
 	var minorVersion uint16
 	if err := binary.Read(reader, binary.BigEndian, &minorVersion); err != nil {
-		return nil, internalerror.InvalidInput
-	} else if minorVersion != MAJOR_VERSION {
-		return nil, internalerror.InvalidInput
+		return nil, errors.Wrap(internalerror.InvalidInput, "read minor version failed")
+	} else if minorVersion != MINOR_VERSION {
+		return nil, errors.Wrapf(internalerror.InvalidInput, "read minor version not match:%v", minorVersion)
 	}
 
 	// block size

@@ -131,7 +131,8 @@ func TestCreateCannylsStorageFullGC(t *testing.T) {
 
 }
 
-func TestCreateCannylsOverflow(t *testing.T) {
+//FIXME
+func TestCreateCannylsNoOverflow(t *testing.T) {
 	storage, err := CreateCannylsStorage("tmp11.lusf", 400*1024, 0.01)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
@@ -147,23 +148,26 @@ func TestCreateCannylsOverflow(t *testing.T) {
 		storage.Delete(lumpidnum(i))
 	}
 
+	// (5+8+2+5)*60 + (5+8) * 20 == 1460
 	snapshot := storage.JournalSnapshot()
 	assert.Equal(t, uint64(0), snapshot.UnreleasedHead)
 	assert.Equal(t, uint64(0), snapshot.Head)
-	assert.Equal(t, uint64(2100), snapshot.Tail)
+	assert.Equal(t, uint64(1460), snapshot.Tail)
 
 	storage.JournalGC()
 
+	// (60-20) * (5 + 8 + 2 + 5) + 2100 == 2260
 	snapshot = storage.JournalSnapshot()
-	assert.Equal(t, uint64(2100), snapshot.UnreleasedHead)
-	assert.Equal(t, uint64(2100), snapshot.Head)
-	assert.Equal(t, uint64(3220), snapshot.Tail)
+	assert.Equal(t, uint64(1460), snapshot.UnreleasedHead)
+	assert.Equal(t, uint64(1460), snapshot.Head)
+	assert.Equal(t, uint64(2260), snapshot.Tail)
 
+	// 2260 + 40 * PUTRECORDSIZE
 	storage.JournalGC()
 	snapshot = storage.JournalSnapshot()
-	assert.Equal(t, uint64(3220), snapshot.UnreleasedHead)
-	assert.Equal(t, uint64(3220), snapshot.Head)
-	assert.Equal(t, uint64(784), snapshot.Tail)
+	assert.Equal(t, uint64(2260), snapshot.UnreleasedHead)
+	assert.Equal(t, uint64(2260), snapshot.Head)
+	assert.Equal(t, uint64(3060), snapshot.Tail)
 
 }
 

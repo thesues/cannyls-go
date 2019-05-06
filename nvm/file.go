@@ -2,12 +2,13 @@ package nvm
 
 import (
 	_ "bytes"
+	"io"
+	"os"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/util"
-	"io"
-	"os"
 )
 
 type FileNVM struct {
@@ -96,6 +97,7 @@ func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 
 	//reopen the file
 	parsedFile.Close()
+
 	if f, err = openFileWithDirectIO(path, os.O_RDWR, 0755); err != nil {
 		return nil, nil, err
 	}

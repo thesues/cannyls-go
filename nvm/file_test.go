@@ -3,12 +3,13 @@ package nvm
 import (
 	"bytes"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/thesues/cannyls-go/block"
 	"io"
 	"os"
 	"syscall"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/thesues/cannyls-go/block"
 )
 
 func TestFileNVMOpen(t *testing.T) {
@@ -35,6 +36,7 @@ func TestFileNVMReopen(t *testing.T) {
 	defer os.Remove("foo-test.lusf")
 
 	nvm, _, err = Open("foo-test.lusf")
+	fmt.Printf("%+v\n", err)
 	assert.Nil(t, err)
 
 	data = bytes.NewBuffer([]byte{})

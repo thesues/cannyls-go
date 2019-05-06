@@ -2,6 +2,7 @@ package lumpindex
 
 import (
 	"fmt"
+
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
@@ -157,7 +158,7 @@ func (index *LumpIndex) DataPortions() []portion.DataPortion {
 func (item internalItem) Less(than btree.Item) bool {
 	left := item.id
 	right := (than.(internalItem)).id
-	if left.Compare(right) == -1 {
+	if left.Compare(right) < 0 {
 		return true
 	} else {
 		return false

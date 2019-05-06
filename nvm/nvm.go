@@ -2,8 +2,9 @@ package nvm
 
 import (
 	"errors"
-	"github.com/thesues/cannyls-go/block"
 	"io"
+
+	"github.com/thesues/cannyls-go/block"
 )
 
 type NonVolatileMemory interface {
@@ -21,7 +22,7 @@ var (
 )
 
 const (
-	MAJOR_VERSION           uint16 = 1
+	MAJOR_VERSION           uint16 = 2
 	MINOR_VERSION           uint16 = 1
 	MAX_JOURNAL_REGION_SIZE uint64 = (1 << 40) - 1
 	MAX_DATA_REGION_SIZE    uint64 = MAX_JOURNAL_REGION_SIZE * uint64(block.MIN)

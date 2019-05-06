@@ -3,14 +3,15 @@ package journal
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/adler32"
+	"io"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
-	"hash/adler32"
-	"io"
 )
 
 var _ = fmt.Println
@@ -25,7 +26,7 @@ const (
 )
 const (
 	RECORD_HEADER_SIZE   = 1 + 4 // TAG size + Checksum size
-	LUMPID_SIZE          = 16
+	LUMPID_SIZE          = 8
 	LENGTH_SIZE          = 2
 	PORTION_SIZE         = 5
 	END_OF_RECORDS_SIZE  = 1 + 4 //Tag Size + Checksum size //GO_TO_FRONT and END_OF_RECORD
@@ -121,7 +122,7 @@ func (record PutRecord) WriteTo(writer io.Writer) error {
 	if err := writeRecordHeader(record, writer); err != nil {
 		return err
 	}
-	if _, err := writer.Write(record.LumpID.GetBytes()); err != nil {
+	if _, err := record.LumpID.Write(writer); err != nil {
 		return err
 	}
 	offset, len := record.DataPortion.AsInts()
@@ -143,7 +144,7 @@ func (record PutRecord) CheckSum() uint32 {
 	var tag = []byte{TAG_PUT}
 	hash := adler32.New()
 	hash.Write(tag)
-	hash.Write(record.LumpID.GetBytes())
+	record.LumpID.Write(hash)
 	offset, len := record.DataPortion.AsInts() //offset is always 40bit wide
 	// uint40 + uint16 = 7 bytes
 	var buf [7]byte
@@ -163,7 +164,7 @@ func (record DeleteRecord) WriteTo(writer io.Writer) error {
 	if err := writeRecordHeader(record, writer); err != nil {
 		return err
 	}
-	if _, err := writer.Write(record.LumpID.GetBytes()); err != nil {
+	if _, err := record.LumpID.Write(writer); err != nil {
 		return err
 	}
 	return nil
@@ -173,7 +174,7 @@ func (record DeleteRecord) CheckSum() uint32 {
 	var tag = []byte{TAG_DELETE}
 	hash := adler32.New()
 	hash.Write(tag)
-	hash.Write(record.LumpID.GetBytes())
+	record.LumpID.Write(hash)
 	return hash.Sum32()
 }
 
@@ -191,7 +192,7 @@ func (record EmbedRecord) WriteTo(w io.Writer) error {
 	if err := writeRecordHeader(record, w); err != nil {
 		return err
 	}
-	if _, err := w.Write(record.LumpID.GetBytes()); err != nil {
+	if _, err := record.LumpID.Write(w); err != nil {
 		return err
 	}
 
@@ -219,7 +220,7 @@ func (record EmbedRecord) CheckSum() uint32 {
 	//tag
 	hash.Write(tag)
 	//lumpID
-	hash.Write(record.LumpID.GetBytes())
+	record.LumpID.Write(hash)
 	//length of data
 	var buf [2]byte
 	util.PutUINT16(buf[:], uint16(len(record.Data)))
@@ -236,8 +237,8 @@ func (record DeleteRange) CheckSum() uint32 {
 	hash := adler32.New()
 	//tag
 	hash.Write(tag)
-	hash.Write(record.Start.GetBytes())
-	hash.Write(record.End.GetBytes())
+	record.Start.Write(hash)
+	record.End.Write(hash)
 	return hash.Sum32()
 }
 
@@ -245,8 +246,8 @@ func (record DeleteRange) WriteTo(w io.Writer) error {
 	if err := writeRecordHeader(record, w); err != nil {
 		return err
 	}
-	w.Write(record.Start.GetBytes())
-	w.Write(record.End.GetBytes())
+	record.Start.Write(w)
+	record.End.Write(w)
 
 	return nil
 }
@@ -331,8 +332,8 @@ func ReadRecordFrom(reader io.Reader) (JournalRecord, error) {
 
 //helper
 func readLumpId(reader io.Reader) (lump.LumpId, error) {
-	//128bit
-	var buf [16]byte
+	//64bit
+	var buf [8]byte
 	if _, err := io.ReadFull(reader, buf[:]); err != nil {
 		return lump.EmptyLump(), err
 	}

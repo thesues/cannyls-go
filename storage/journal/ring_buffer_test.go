@@ -2,13 +2,14 @@ package journal
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
-	"testing"
 )
 
 var _ = fmt.Print
@@ -84,14 +85,15 @@ func TestRingBufferRound(t *testing.T) {
 	var i uint32 = 1
 	for i <= n {
 		ring.Enqueue(record)
-		assert.Equal(t, uint64(512+i*21), ring.Tail())
+		assert.Equal(t, uint64(512+i*record.ExternalSize()), ring.Tail())
 		i++
 	}
 
-	assert.Equal(t, uint64(1016), ring.Tail())
+	assert.Equal(t, uint64(1019), ring.Tail())
 
+	//overflow here
 	ring.Enqueue(record)
-	assert.Equal(t, uint64(21), ring.Tail())
+	assert.Equal(t, uint64(13), ring.Tail())
 
 }
 
@@ -101,10 +103,10 @@ func TestRingBufferFull(t *testing.T) {
 	ring := NewJournalRingBuffer(bufferedNvm, 0)
 
 	record := recordPut("1111", 1, 2)
-	for uint32(ring.Tail()) <= 1024-record.ExternalSize() {
+	for uint32(ring.Tail()) <= 1024-record.ExternalSize()-5 {
 		ring.Enqueue(record)
 	}
-	assert.Equal(t, uint64(1008), ring.Tail())
+	assert.Equal(t, uint64(1000), ring.Tail())
 
 	_, err := ring.Enqueue(record)
 	assert.Error(t, err)
@@ -127,14 +129,14 @@ func TestRingBufferTooLargeRecord(t *testing.T) {
 	bufferedNvm := NewJournalNvmBuffer(f)
 	ring := NewJournalRingBuffer(bufferedNvm, 0)
 
-	data := make([]byte, 997)
+	data := make([]byte, 1005)
 	record := recordEmbed("1111", data)
 	assert.Equal(t, 1020, int(record.ExternalSize()))
 
 	_, err := ring.Enqueue(record)
 	assert.Error(t, err)
 
-	data = make([]byte, 996)
+	data = make([]byte, 1004)
 	record = recordEmbed("1111", data)
 	assert.Equal(t, 1019, int(record.ExternalSize()))
 	_, err = ring.Enqueue(record)

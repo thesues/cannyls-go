@@ -1,40 +1,61 @@
 package lump
 
 import (
+	"encoding/binary"
+	"io"
+
+	"strconv"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
-	"github.com/thesues/cannyls-go/util/uint128"
 )
 
 type LumpId struct {
-	uint128.Uint128
+	lo uint64
 }
 
 func FromU64(hi uint64, lo uint64) LumpId {
-	return LumpId{uint128.FromInts(hi, lo)}
+	return LumpId{lo: lo}
 }
 func FromBytes(vec []byte) (LumpId, error) {
-	if len(vec) > 16 {
-		return EmptyLump(), errors.Wrap(internalerror.InvalidInput, "from bytes to lumpId failed")
+	if len(vec) != 8 {
+		return LumpId{}, errors.Wrap(internalerror.InvalidInput, "from bytes to lumpId failed")
 	}
-	return LumpId{uint128.FromBytes(vec)}, nil
+	n := binary.BigEndian.Uint64(vec[:8])
+	return LumpId{lo: n}, nil
 }
 
 func FromString(s string) (LumpId, error) {
-	n, err := uint128.FromString(s)
+	n, err := strconv.ParseUint(s, 16, 64)
 	if err != nil {
-		return EmptyLump(), errors.Wrap(err, "from string to lumpId failed")
+		return LumpId{}, errors.Wrap(internalerror.InvalidInput, "from string to lumpId failed")
 	}
-	return LumpId{n}, nil
+	return LumpId{lo: n}, nil
+}
+
+func (id LumpId) String() string {
+	return strconv.FormatUint(id.lo, 16)
+}
+
+func (id LumpId) GetBytes() []byte {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], id.lo)
+	return b[:]
+}
+
+func (id LumpId) Write(w io.Writer) (int, error) {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], id.lo)
+	return w.Write(b[:])
 }
 
 func (left LumpId) Compare(right LumpId) int {
-	return left.Uint128.Compare(right.Uint128)
+	return int(left.lo - right.lo)
 }
 
 func EmptyLump() LumpId {
-	return LumpId{uint128.FromInts(0, 0)}
+	return LumpId{}
 }
 
 //lump data
