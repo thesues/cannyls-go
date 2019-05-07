@@ -3,16 +3,17 @@ package main
 import (
 	"fmt"
 
-	"github.com/thesues/cannyls-go/block"
-	"github.com/thesues/cannyls-go/lump"
-	"github.com/thesues/cannyls-go/storage"
-	"github.com/urfave/cli"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/lump"
+	"github.com/thesues/cannyls-go/storage"
+	"github.com/urfave/cli"
 
 	"context"
 	"io"
@@ -142,7 +143,7 @@ func doInsertAndServe(c *cli.Context) (err error) {
 		downloadImagesPath += "/"
 	}
 	fmt.Println(downloadImagesPath)
-	files, err := filepath.Glob(downloadImagesPath + "*")
+	files, err := filepath.Glob(downloadImagesPath + "*_*_*")
 	if err != nil {
 		return
 	}
