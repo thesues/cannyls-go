@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"fmt"
+	"runtime"
+
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
-	"runtime"
 )
 
 var _ = fmt.Sprintf
@@ -58,6 +59,7 @@ func TestLumpIndexDelete(t *testing.T) {
 	assert.Nil(t, p)
 	assert.Error(t, err)
 
+	fmt.Println(tree.ListRange(lumpid("1111"), lumpid("5555")))
 	//range delete
 	tree.DeleteRange(lumpid("1111"), lumpid("5555"))
 
@@ -69,7 +71,7 @@ func TestLumpIndexDelete(t *testing.T) {
 
 //helper
 
-const N int64 = 10000000
+const N int64 = 1000000
 
 func TestSpace(t *testing.T) {
 	var msb, msa runtime.MemStats
@@ -87,7 +89,8 @@ func TestSpace(t *testing.T) {
 	fmt.Println(p[N/2])
 
 	runtime.ReadMemStats(&msa)
-	fmt.Printf("LUMP Index %0.0f MiB allocated for %s\n", float64(msa.Alloc-msb.Alloc)/float64(1<<20), humanize.Comma(N))
+	fmt.Printf("GOLANG LUMP Index %0.0f MiB allocated for %s\n", float64(msa.Alloc-msb.Alloc)/float64(1<<20), humanize.Comma(N))
+	fmt.Printf("C LANG            %d    MiB allocated\n", tree.MemoryUsed()>>20)
 }
 
 func lumpid(s string) lump.LumpId {

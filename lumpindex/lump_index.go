@@ -3,164 +3,124 @@ package lumpindex
 import (
 	"fmt"
 
-	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
+	judy "github.com/thesues/go-judy"
 )
-
-/*
-	type assertion should be fast
-	https://stackoverflow.com/questions/28024884/does-a-type-assertion-type-switch-have-bad-performance-is-slow-in-go
-*/
 
 var _ = fmt.Println
 
 type LumpIndex struct {
-	tree  *btree.BTree
-	count uint64
-}
-
-type internalItem struct {
-	id lump.LumpId
-	n  uint64
+	tree judy.JudyL
 }
 
 func NewIndex() *LumpIndex {
-	free := btree.NewFreeList(1024)
+	tree := judy.JudyL{}
 	return &LumpIndex{
-		tree: btree.NewWithFreeList(128, free),
+		tree: tree,
 	}
 }
+
 func (index *LumpIndex) Get(id lump.LumpId) (p portion.Portion, err error) {
-	key := internalItem{id: id, n: 0}
-	item := index.tree.Get(key)
-	if item == nil {
+	v, ok := index.tree.Get(id.U64())
+	if ok == false {
 		return nil, errors.Wrapf(internalerror.InvalidInput, "failed to get key :%s", id.String())
 	}
 
-	p = fromItemToPortion(item)
-	return p, nil
+	p, _ = fromValueToPortion(v)
+	return
 }
 
 func (index *LumpIndex) InsertDataPortion(id lump.LumpId, data portion.DataPortion) {
 	var n uint64 = 0
 	n = data.Start.AsU64() | uint64(data.Len)<<40 | 1<<63
-	key := internalItem{id: id, n: n}
-	updated := index.tree.ReplaceOrInsert(key)
-	if updated == nil {
-		index.count++
-	}
+	index.tree.Insert(id.U64(), n)
 }
 
 func (index *LumpIndex) InsertJournalPortion(id lump.LumpId, data portion.JournalPortion) {
 	var n uint64 = 0
 	n = data.Start.AsU64() | uint64(data.Len)<<40
-	key := internalItem{id: id, n: n}
-	updated := index.tree.ReplaceOrInsert(key)
-	if updated == nil {
-		index.count++
+	index.tree.Insert(id.U64(), n)
+}
+
+func (index *LumpIndex) Delete(id lump.LumpId) bool {
+	return index.tree.Delete(id.U64())
+}
+
+func (index *LumpIndex) DeleteRange(start lump.LumpId, end lump.LumpId) {
+	indexNum, _, ok := index.tree.First(start.U64())
+	for ok && indexNum < end.U64() {
+		if rc := index.tree.Delete(indexNum); rc == false {
+			fmt.Printf("index %d\n", indexNum)
+			panic("judy index, delete item when iterating.. should never happen")
+		}
+		indexNum, _, ok = index.tree.Next(indexNum)
 	}
 }
 
-func (index *LumpIndex) Delete(id lump.LumpId) portion.Portion {
-	key := internalItem{id: id, n: 0}
-	item := index.tree.Delete(key)
-	if item != nil {
-		index.count--
+func (index *LumpIndex) Min() (id lump.LumpId, ok bool) {
+	var n uint64
+	n, _, ok = index.tree.First(0)
+	if ok {
+		id = lump.FromU64(0, n)
 	}
-
-	return fromItemToPortion(item)
+	return
 }
 
-func fromItemToPortion(item btree.Item) portion.Portion {
-	if item == nil {
-		return nil
+func (index *LumpIndex) List() []lump.LumpId {
+	vec := make([]lump.LumpId, 0, 1024)
+	indexNum, _, ok := index.tree.First(0)
+	for ok {
+		vec = append(vec, lump.FromU64(0, indexNum))
+		indexNum, _, ok = index.tree.Next(indexNum)
 	}
-	var p portion.Portion
-	n := item.(internalItem).n
+	return vec
+}
+func (index *LumpIndex) DataPortions() []portion.DataPortion {
+	n := index.tree.CountAll()
+	vec := make([]portion.DataPortion, 1, 100000+n)
+	vec[0] = portion.NewDataPortion(0, 0)
+
+	indexNum, value, ok := index.tree.First(0)
+
+	for ok {
+		if p, isDataPortion := fromValueToPortion(value); isDataPortion {
+			vec = append(vec, p.(portion.DataPortion))
+		}
+		indexNum, value, ok = index.tree.Next(indexNum)
+	}
+	return vec
+}
+
+func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.LumpId {
+	vec := make([]lump.LumpId, 0, 1024)
+	indexNum, _, ok := index.tree.First(start.U64())
+	for ok && indexNum < end.U64() {
+		vec = append(vec, lump.FromU64(0, indexNum))
+		indexNum, _, ok = index.tree.Next(indexNum)
+	}
+	return vec
+}
+
+func (index *LumpIndex) MemoryUsed() uint64 {
+	return index.tree.MemoryUsed()
+}
+
+func fromValueToPortion(value uint64) (p portion.Portion, isDataPortion bool) {
+	n := value
 	//data portion
 	kind := n >> 63
 	len := uint16(n >> 40 & 0xFFFF)
 	start := n & (address.MAX_ADDRESS)
 	if kind == 0 {
 		p = portion.NewJournalPortion(start, len)
+		isDataPortion = false
 	} else {
 		p = portion.NewDataPortion(start, len)
+		isDataPortion = true
 	}
-	return p
-}
-
-//bugy, the returned slice could be very large, should not be used production
-func (index *LumpIndex) DeleteRange(start lump.LumpId, end lump.LumpId) {
-	v := index.ListRange(start, end)
-	for _, item := range v {
-		index.Delete(item)
-	}
-}
-
-//bugy, the returned slice could be very large, should not be used production
-func (index *LumpIndex) List() []lump.LumpId {
-	vec := make([]lump.LumpId, 0, 100)
-	index.tree.Ascend(func(a btree.Item) bool {
-		i := a.(internalItem)
-		vec = append(vec, i.id)
-		return true
-	})
-	return vec
-}
-
-func (index *LumpIndex) Min() (id lump.LumpId, ok bool) {
-	ok = false
-	item := index.tree.Min()
-	if item == nil {
-		ok = false
-		return
-	}
-	a := item.(internalItem)
-	id = a.id
-	ok = true
 	return
-}
-
-//bugy, the returned slice could be very large, should not be used production
-func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.LumpId {
-	vec := make([]lump.LumpId, 0, 100)
-	startItem := internalItem{id: start, n: 0}
-	endItem := internalItem{id: end, n: 0}
-	index.tree.AscendRange(startItem, endItem, func(a btree.Item) bool {
-		i := a.(internalItem)
-		vec = append(vec, i.id)
-		return true
-	})
-	return vec
-}
-
-func (index *LumpIndex) DataPortions() []portion.DataPortion {
-	vec := make([]portion.DataPortion, 1, index.count+1)
-
-	sentinel := portion.NewDataPortion(0, 0)
-	vec[0] = sentinel
-	index.tree.Ascend(func(a btree.Item) bool {
-		item := a.(internalItem)
-		if (item.n >> 63) == 1 {
-			len := uint16(item.n >> 40 & 0xFFFF)
-			start := item.n & (address.MAX_ADDRESS)
-			vec = append(vec, portion.NewDataPortion(start, len))
-		}
-		return true
-	})
-	return vec
-}
-
-func (item internalItem) Less(than btree.Item) bool {
-	left := item.id
-	right := (than.(internalItem)).id
-	if left.Compare(right) < 0 {
-		return true
-	} else {
-		return false
-	}
 }

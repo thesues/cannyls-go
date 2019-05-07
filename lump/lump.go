@@ -38,6 +38,10 @@ func (id LumpId) String() string {
 	return strconv.FormatUint(id.lo, 16)
 }
 
+func (id LumpId) U64() uint64 {
+	return id.lo
+}
+
 func (id LumpId) GetBytes() []byte {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], id.lo)

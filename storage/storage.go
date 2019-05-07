@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/lumpindex"
@@ -229,9 +230,16 @@ func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, err error) {
 }
 
 func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, error) {
-	p := store.index.Delete(lumpid)
-	if p == nil {
+	p, err := store.index.Get(lumpid)
+
+	//if not exist
+	if err != nil {
 		return false, nil
+	}
+
+	//Becase previous Get is ok, this Delete will surely success
+	if ok := store.index.Delete(lumpid); ok == false {
+		panic("Delete after Get failed, something bad happend")
 	}
 
 	if doRecord {

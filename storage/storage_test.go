@@ -2,12 +2,13 @@ package storage
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage/journal"
-	"os"
-	"testing"
 )
 
 var _ = fmt.Print
@@ -239,7 +240,10 @@ func BenchmarkStoragePutData(b *testing.B) {
 }
 
 func lumpid(s string) lump.LumpId {
-	l, _ := lump.FromString(s)
+	l, err := lump.FromString(s)
+	if err != nil {
+		panic("failed to create lumpid")
+	}
 	return l
 }
 
