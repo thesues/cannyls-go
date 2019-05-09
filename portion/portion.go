@@ -2,12 +2,14 @@ package portion
 
 import (
 	"fmt"
+
 	"github.com/google/btree"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/block"
 	_ "github.com/thesues/cannyls-go/internalerror"
 )
 
+//FreePortion/SizeBasedPortion/EndBasedPortion is used only in BtreeDataPortionAlloc
 type FreePortion uint64
 
 /*
@@ -30,26 +32,6 @@ func FromDataPortion(dataPortion DataPortion) FreePortion {
 	return NewFreePortion(dataPortion.Start, uint32(dataPortion.Len))
 }
 
-func DefaultFreePortion() FreePortion {
-	return FreePortion(0)
-}
-
-/*
-func DefaultDataPortion() DataPortion {
-	return DataPortion{
-		start: address.AddressFromU32(0),
-		len:   0,
-	}
-}
-
-func DefaultJournalPortion() JournalPortion {
-	return JournalPortion{
-		Start: address.AddressFromU32(0),
-		Len:   0,
-	}
-}
-*/
-
 func (p FreePortion) Start() address.Address {
 	n := uint64(p) & address.MAX_ADDRESS
 	return address.AddressFromU64(n)
@@ -67,7 +49,7 @@ func (p FreePortion) Len() uint32 {
 func (p FreePortion) CheckedExtend(size uint32) (FreePortion, bool) {
 	//bigger than 24bit
 	if p.Len()+size > 0xFFFFFF {
-		return DefaultFreePortion(), false
+		return FreePortion(0), false
 	}
 	return NewFreePortion(p.Start(), p.Len()+size), true
 }

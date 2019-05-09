@@ -2,17 +2,19 @@ package storage
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/storage/allocator"
-	"testing"
 )
 
 func TestDataRegion(t *testing.T) {
 	var capacity_bytes uint32 = 10 * 1024
-	alloc := allocator.Build(capacity_bytes / uint32(512))
+	//Use Judy allocator as default
+	alloc := allocator.BuildJudyAlloc(capacity_bytes / uint32(512))
 	nvm, err := nvm.New(uint64(capacity_bytes))
 	assert.Nil(t, err)
 	region := NewDataRegion(alloc, nvm)

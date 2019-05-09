@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"encoding/hex"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
@@ -42,7 +43,7 @@ func TestRecordWork(t *testing.T) {
 	}
 	var _ = fmt.Printf
 	var _ = hex.Dump
-	var _ = portion.DefaultFreePortion
+	var _ = portion.FreePortion(0)
 	buf := new(bytes.Buffer)
 
 	for _, c := range cases {

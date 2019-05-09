@@ -7,8 +7,17 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 )
 
-func TestAllocate(t *testing.T) {
-	alloc := Build(24)
+func TestAllocateBTree(t *testing.T) {
+	alloc := BuildBtreeDataPortionAlloc(24)
+	DoTestAllocate(t, alloc)
+}
+
+func TestAllocateJudy(t *testing.T) {
+	alloc := BuildJudyAlloc(24)
+	DoTestAllocate(t, alloc)
+}
+
+func DoTestAllocate(t *testing.T, alloc DataPortionAlloc) {
 	p, err := alloc.Allocate(10)
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(0, 10), p)
@@ -37,15 +46,32 @@ func TestAllocate(t *testing.T) {
 	assert.Error(t, err)
 
 }
-func TestAllocateShouldPanic(t *testing.T) {
-	alloc := Build(24)
+
+func TestAllocateBTreeShouldPanic(t *testing.T) {
+	alloc := BuildBtreeDataPortionAlloc(24)
+	DoTestAllocateShouldPanic(t, alloc)
+}
+func TestAllocateJudyShouldPanic(t *testing.T) {
+	alloc := BuildJudyAlloc(24)
+	DoTestAllocateShouldPanic(t, alloc)
+}
+
+func DoTestAllocateShouldPanic(t *testing.T, alloc DataPortionAlloc) {
 	assert.Panics(t, func() {
 		alloc.Release(fportion(10, 10))
 	})
 }
 
-func TestAllocateRelease(t *testing.T) {
-	alloc := Build(419431)
+func TestAllocateBTreeRelease(t *testing.T) {
+	alloc := BuildBtreeDataPortionAlloc(419431)
+	DoTestAllocateRelease(t, alloc)
+}
+func TestAllocateJudyRelease(t *testing.T) {
+	alloc := BuildJudyAlloc(419431)
+	DoTestAllocateRelease(t, alloc)
+}
+
+func DoTestAllocateRelease(t *testing.T, alloc DataPortionAlloc) {
 	var p0, p1, p2, p3, p4, p5, p6 portion.DataPortion
 	var err error
 	p0, err = alloc.Allocate(65)

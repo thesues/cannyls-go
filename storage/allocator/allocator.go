@@ -2,6 +2,8 @@ package allocator
 
 import (
 	"fmt"
+	"sort"
+
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
@@ -9,42 +11,49 @@ import (
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
-	"sort"
 )
 
+type DataPortionAlloc interface {
+	Display()
+	Allocate(size uint16) (free portion.DataPortion, err error)
+	Release(p portion.DataPortion)
+	RestoreFromIndex(blockSize block.BlockSize,
+		capacityInByte uint64, vec []portion.DataPortion)
+}
+
 //TODO: Use ceph bitmap algorithm
-type DataPortionAllocator struct {
+type BtreeDataPortionAlloc struct {
 	sizeToFree *btree.BTree
 	endToFree  *btree.BTree
 }
 
-func New() *DataPortionAllocator {
+func NewBtreeAlloc() *BtreeDataPortionAlloc {
 	freeList := btree.NewFreeList(32)
-	return &DataPortionAllocator{
+	return &BtreeDataPortionAlloc{
 		sizeToFree: btree.NewWithFreeList(32, freeList),
 		endToFree:  btree.NewWithFreeList(32, freeList),
 	}
 }
 
-func Build(capacitySector uint32) *DataPortionAllocator {
-	alloc := New()
+func BuildBtreeDataPortionAlloc(capacitySector uint32) *BtreeDataPortionAlloc {
+	alloc := NewBtreeAlloc()
 	alloc.addFreePortion(portion.NewFreePortion(address.AddressFromU32(0), capacitySector))
 	return alloc
 }
 
-func (alloc *DataPortionAllocator) addFreePortion(free portion.FreePortion) {
+func (alloc *BtreeDataPortionAlloc) addFreePortion(free portion.FreePortion) {
 	alloc.sizeToFree.ReplaceOrInsert(portion.SizeBasedPortion(free))
 	alloc.endToFree.ReplaceOrInsert(portion.EndBasedPortion(free))
 }
 
-func (alloc *DataPortionAllocator) DeleteFreePortion(free portion.FreePortion) {
+func (alloc *BtreeDataPortionAlloc) deleteFreePortion(free portion.FreePortion) {
 	alloc.sizeToFree.Delete(portion.SizeBasedPortion(free))
 	alloc.endToFree.Delete(portion.EndBasedPortion(free))
 }
 
-func (alloc *DataPortionAllocator) Display() {
+func (alloc *BtreeDataPortionAlloc) Display() {
 	fmt.Printf("==Size Based Tree==\n")
-	start := portion.SizeBasedPortion(portion.DefaultFreePortion())
+	start := portion.SizeBasedPortion(portion.FreePortion(0))
 	alloc.sizeToFree.AscendGreaterOrEqual(start, func(a btree.Item) bool {
 		p := portion.FreePortion(a.(portion.SizeBasedPortion))
 		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
@@ -52,7 +61,7 @@ func (alloc *DataPortionAllocator) Display() {
 	})
 
 	fmt.Printf("==End Based Tree==\n")
-	startn := portion.EndBasedPortion(portion.DefaultFreePortion())
+	startn := portion.EndBasedPortion(portion.FreePortion(0))
 	alloc.endToFree.AscendGreaterOrEqual(startn, func(a btree.Item) bool {
 		p := portion.FreePortion(a.(portion.EndBasedPortion))
 		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
@@ -61,7 +70,7 @@ func (alloc *DataPortionAllocator) Display() {
 	return
 }
 
-func (alloc *DataPortionAllocator) Allocate(size uint16) (free portion.DataPortion, err error) {
+func (alloc *BtreeDataPortionAlloc) Allocate(size uint16) (free portion.DataPortion, err error) {
 	var isAllocated = false
 	start := portion.SizeBasedPortion(portion.NewFreePortion(
 		address.AddressFromU32(0), uint32(size)))
@@ -69,7 +78,7 @@ func (alloc *DataPortionAllocator) Allocate(size uint16) (free portion.DataPorti
 	alloc.sizeToFree.AscendGreaterOrEqual(start, func(a btree.Item) bool {
 		p := portion.FreePortion(a.(portion.SizeBasedPortion))
 		if p.Len() >= uint32(size) {
-			alloc.DeleteFreePortion(p)
+			alloc.deleteFreePortion(p)
 			p, free = p.SlicePart(size)
 			if p.Len() > 0 {
 				alloc.addFreePortion(p)
@@ -88,7 +97,7 @@ func (alloc *DataPortionAllocator) Allocate(size uint16) (free portion.DataPorti
 	}
 }
 
-func (alloc *DataPortionAllocator) Release(p portion.DataPortion) {
+func (alloc *BtreeDataPortionAlloc) Release(p portion.DataPortion) {
 	//check
 	if alloc.isOverlapedPortion(p) {
 		panic("allocate failed to allocate an overlap poriton")
@@ -98,7 +107,7 @@ func (alloc *DataPortionAllocator) Release(p portion.DataPortion) {
 	alloc.addFreePortion(merged)
 }
 
-func (alloc *DataPortionAllocator) isOverlapedPortion(p portion.DataPortion) bool {
+func (alloc *BtreeDataPortionAlloc) isOverlapedPortion(p portion.DataPortion) bool {
 	var isOverlap = false
 	tmp := portion.FromDataPortion(p)
 	key := portion.EndBasedPortion(portion.NewFreePortion(tmp.Start(), 0))
@@ -121,7 +130,7 @@ func (alloc *DataPortionAllocator) isOverlapedPortion(p portion.DataPortion) boo
 	return isOverlap
 }
 
-func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (merged portion.FreePortion) {
+func (alloc *BtreeDataPortionAlloc) mergeFreePortions(free portion.FreePortion) (merged portion.FreePortion) {
 	merged = free
 	//find the a portion whose end equals to free's start
 	start := portion.EndBasedPortion(portion.NewFreePortion(free.Start(), 0))
@@ -132,7 +141,7 @@ func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (
 		if ok {
 			merged = portion.NewFreePortion(p.Start(), p.Len()+free.Len())
 			//remove prev
-			alloc.DeleteFreePortion(p)
+			alloc.deleteFreePortion(p)
 
 			//used merged portion as new free portion, begin the next merge
 			free = merged
@@ -148,7 +157,7 @@ func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (
 			if ok {
 				merged = portion.NewFreePortion(free.Start(), free.Len()+p.Len())
 				//alloc.endToFree.Delete(portion.EndBasedPortion(p))
-				alloc.DeleteFreePortion(p)
+				alloc.deleteFreePortion(p)
 			}
 
 		}
@@ -159,7 +168,7 @@ func (alloc *DataPortionAllocator) mergeFreePortions(free portion.FreePortion) (
 
 }
 
-func (alloc *DataPortionAllocator) RestoreFromIndex(blockSize block.BlockSize,
+func (alloc *BtreeDataPortionAlloc) RestoreFromIndex(blockSize block.BlockSize,
 	capacityInByte uint64, vec []portion.DataPortion) {
 
 	//sort the slice reverse

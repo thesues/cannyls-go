@@ -48,7 +48,8 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	}
 
 	journalRegion.RestoreIndex(index)
-	alloc := allocator.New()
+	//use JudyAlloc as default
+	alloc := allocator.NewJudyAlloc()
 	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
 	dataRegion := NewDataRegion(alloc, dataNVM)
 

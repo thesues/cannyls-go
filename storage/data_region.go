@@ -2,6 +2,8 @@ package storage
 
 import (
 	"fmt"
+	"io"
+
 	"github.com/thesues/cannyls-go/block"
 	_ "github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
@@ -9,7 +11,6 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/storage/allocator"
 	"github.com/thesues/cannyls-go/util"
-	"io"
 )
 
 const (
@@ -17,12 +18,12 @@ const (
 )
 
 type DataRegion struct {
-	allocator  *allocator.DataPortionAllocator
+	allocator  allocator.DataPortionAlloc
 	nvm        nvm.NonVolatileMemory
 	block_size block.BlockSize
 }
 
-func NewDataRegion(alloc *allocator.DataPortionAllocator, nvm nvm.NonVolatileMemory) *DataRegion {
+func NewDataRegion(alloc allocator.DataPortionAlloc, nvm nvm.NonVolatileMemory) *DataRegion {
 	return &DataRegion{
 		allocator:  alloc,
 		nvm:        nvm,
