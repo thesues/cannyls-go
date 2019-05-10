@@ -1,22 +1,22 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 
+	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 
+	"github.com/gin-gonic/gin"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage"
 	"github.com/urfave/cli"
 
 	"context"
-	"io"
 	"net/http"
 	"time"
 )
@@ -28,9 +28,155 @@ func favicon(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII=")
 }
 
-func doServer(store *storage.Storage) {
-	var err error
+//Based on https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
 
+//put
+type PutRequest struct {
+	ctx        context.Context
+	data       lump.LumpData
+	id         uint64
+	isAutoId   bool
+	resultChan chan PutResult
+}
+
+type PutResult struct {
+	id  uint64
+	err error
+}
+
+//get
+type GetRequest struct {
+	ctx        context.Context
+	id         uint64
+	resultChan chan GetResult
+}
+
+type GetResult struct {
+	data []byte
+	err  error
+}
+
+//delete
+type DeleteRequest struct {
+	ctx        context.Context
+	resultChan chan GetResult
+}
+
+var (
+	TimeoutError = errors.New("process timeout")
+	NoKeyError   = errors.New("no more files")
+)
+
+func chooseID(store *storage.Storage) lump.LumpId {
+	id, have := store.MaxId()
+	if have == false {
+		id = lump.FromU64(0, 0)
+	} else {
+		id = id.Inc()
+	}
+	return id
+}
+
+func handleGetRequest(store *storage.Storage, request GetRequest) {
+	var response GetResult
+	select {
+	case <-request.ctx.Done():
+		//timeout
+		response.err = TimeoutError
+		request.resultChan <- response
+		return
+	default:
+	}
+	var id lump.LumpId = lump.FromU64(0, request.id)
+
+	var err error
+	response.data, err = store.Get(id)
+	if err != nil {
+		response.err = err
+	}
+
+	select {
+	//timeout
+	case <-request.ctx.Done():
+		request.resultChan <- GetResult{data: nil, err: TimeoutError}
+	case request.resultChan <- response:
+	}
+}
+
+func handleRandomRequest(store *storage.Storage, request DeleteRequest) {
+
+	var response GetResult
+	var err error
+	select {
+	case <-request.ctx.Done():
+		//timeout
+		response.err = TimeoutError
+		request.resultChan <- response
+		return
+	default:
+	}
+
+	id, have := store.MinId()
+	if have == false {
+		response.data = nil
+		response.err = NoKeyError
+		goto END
+	}
+	response.data, err = store.Get(id)
+	if err != nil {
+		response.err = err
+		goto END
+	}
+
+	_, err = store.Delete(id)
+	if err != nil {
+		response.err = err
+	}
+
+END:
+	select {
+	//timeout
+	case <-request.ctx.Done():
+		request.resultChan <- GetResult{data: nil, err: TimeoutError}
+	case request.resultChan <- response:
+	}
+}
+
+func handlePutRequest(store *storage.Storage, request PutRequest) {
+
+	var response PutResult
+
+	select {
+	case <-request.ctx.Done():
+		//timeout
+		response.err = TimeoutError
+		request.resultChan <- response
+		return
+	default:
+	}
+
+	var id lump.LumpId = lump.FromU64(0, request.id)
+	if request.isAutoId {
+		id = chooseID(store)
+	}
+
+	_, err := store.Put(id, request.data)
+	response.id = id.U64()
+	if err != nil {
+		response.err = err
+	}
+	store.JournalSync()
+
+	select {
+	//timeout
+	case <-request.ctx.Done():
+		request.resultChan <- PutResult{id: id.U64(), err: TimeoutError}
+	case request.resultChan <- response:
+	}
+
+}
+
+func ServeStore(store *storage.Storage) {
 	fmt.Printf("start http server\n")
 
 	sc := make(chan os.Signal, 1)
@@ -49,43 +195,19 @@ func doServer(store *storage.Storage) {
 		}
 	}()
 
-	//https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
-
-	type Result struct {
-		data []byte
-	}
-
-	type Request struct {
-		ctx        context.Context
-		resultChan chan Result
-	}
-
-	reqeustChan := make(chan Request, 10)
+	reqeustChan := make(chan interface{}, 10)
 
 	go func() {
 		for {
 			select {
 			case request := <-reqeustChan:
-				select {
-				case <-request.ctx.Done():
-					continue
-				default:
-				}
-
-				var result Result
-				id, have := store.MinId()
-				if have == false {
-					result.data = nil
-				}
-				result.data, err = store.Get(id)
-				if err != nil {
-					result.data = nil
-				}
-				store.Delete(id)
-
-				select {
-				case <-request.ctx.Done():
-				case request.resultChan <- result:
+				switch request.(type) {
+				case PutRequest:
+					handlePutRequest(store, request.(PutRequest))
+				case GetRequest:
+					handleGetRequest(store, request.(GetRequest))
+				case DeleteRequest:
+					handleRandomRequest(store, request.(DeleteRequest))
 				}
 			case <-time.After(3 * time.Second):
 				store.RunSideJobOnce()
@@ -93,104 +215,151 @@ func doServer(store *storage.Storage) {
 		}
 	}()
 
-	http.HandleFunc("/favicon.ico", favicon)
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	r := gin.Default()
+
+	//call delete
+	r.GET("/random", func(c *gin.Context) {
 		ctx := context.Background()
-		request := Request{
+		request := DeleteRequest{
 			ctx:        ctx,
-			resultChan: make(chan Result),
+			resultChan: make(chan GetResult),
 		}
 
 		reqeustChan <- request
 
 		select {
 		case out := <-request.resultChan:
-			if out.data != nil {
-				w.WriteHeader(200)
-				w.Write(out.data)
+			if out.err != nil {
+				c.String(400, out.err.Error())
 			} else {
-				w.WriteHeader(404)
-				w.Write([]byte("<html>404 no more images</html>"))
+				c.Status(200)
+				c.Stream(func(w io.Writer) bool {
+					_, err := w.Write(out.data)
+					if err != nil {
+						fmt.Println(err)
+						return true
+					}
+					return false
+				})
+				return
 			}
-
 		case <-ctx.Done():
-			w.WriteHeader(405)
+			c.String(400, "TIMEOUT")
+		}
+	})
+
+	r.GET("/get/:id", func(c *gin.Context) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil {
+			c.String(400, err.Error())
+			return
+		}
+		ctx := context.Background()
+		request := GetRequest{
+			ctx:        ctx,
+			id:         uint64(id),
+			resultChan: make(chan GetResult),
+		}
+
+		reqeustChan <- request
+
+		select {
+		case out := <-request.resultChan:
+			if out.err != nil {
+				c.String(400, out.err.Error())
+			} else {
+				c.Status(200)
+				c.Stream(func(w io.Writer) bool {
+					_, err := w.Write(out.data)
+					if err != nil {
+						fmt.Println(err)
+						return true
+					}
+					return false
+				})
+				return
+			}
+		case <-ctx.Done():
+			c.String(400, "TIMEOUT")
+		}
+	})
+
+	r.POST("/put/*id", func(c *gin.Context) {
+		var isAutoId = false
+		var id uint64
+		var err error
+		sid := c.Param("id")
+		//gin's optinal param always has a slas. check this https://github.com/gin-gonic/gin/issues/279
+		if sid == "/" {
+			isAutoId = true
+		} else {
+			id, err = strconv.ParseUint(sid[1:], 10, 64)
+			if err != nil {
+				c.String(400, err.Error())
+				return
+			}
+		}
+
+		readFile, header, err := c.Request.FormFile("file")
+		if err != nil {
+			c.String(400, err.Error())
+			return
+		}
+		if header.Size > int64(lump.LUMP_MAX_SIZE) {
+			c.String(405, "size too big")
+			return
+		}
+		ab := lump.NewLumpDataAligned(int(header.Size), block.Min())
+		_, err = io.ReadFull(readFile, ab.AsBytes())
+		if err != nil {
+			c.String(409, "read failed")
+			return
+		}
+
+		ctx := context.Background()
+		request := PutRequest{
+			ctx:        ctx,
+			data:       ab,
+			id:         uint64(id),
+			isAutoId:   isAutoId,
+			resultChan: make(chan PutResult),
+		}
+
+		reqeustChan <- request
+
+		select {
+		case out := <-request.resultChan:
+			fmt.Println(out)
+			if out.err != nil {
+				c.String(400, out.err.Error())
+			} else {
+				c.String(200, "The ID is %d\n", out.id)
+				return
+			}
+		case <-ctx.Done():
+			c.String(400, "TIMEOUT")
 		}
 
 	})
 
-	http.ListenAndServe(":8081", nil)
+	r.Run(":8081")
 	return
-
-}
-func doInsertAndServe(c *cli.Context) (err error) {
-
-	storagePath := c.String("storage")
-	downloadImagesPath := c.String("imagespath")
-
-	store, err := storage.OpenCannylsStorage(storagePath)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-
-	if downloadImagesPath == "" {
-		doServer(store)
-		return nil
-	}
-
-	if false == strings.HasSuffix(downloadImagesPath, "/") {
-		downloadImagesPath += "/"
-	}
-	fmt.Println(downloadImagesPath)
-	files, err := filepath.Glob(downloadImagesPath + "*_*_*")
-	if err != nil {
-		return
-	}
-	var processedFile = 0
-	for _, f := range files {
-		fd, err := os.Open(f)
-		if err != nil {
-			return err
-		}
-		ids := strings.Split(f, "_")
-		id, err := strconv.ParseUint(ids[1], 10, 64)
-		if err != nil {
-			fmt.Printf("can not convert %s\n", f)
-			continue
-		}
-
-		info, err := fd.Stat()
-		if err != nil {
-			fmt.Printf("can not find size for %s\n", f)
-			continue
-		}
-		if info.Size() > lump.LUMP_MAX_SIZE {
-			fmt.Printf("size is too big %d\n", info.Size())
-			continue
-		}
-
-		ab := lump.NewLumpDataAligned(int(info.Size()), block.Min())
-
-		io.ReadFull(fd, ab.AsBytes())
-		updated, err := store.Put(lumpidnum(id), ab)
-		fmt.Printf("insert %s, duplicated ? %v\n", f, updated)
-		fd.Close()
-		processedFile++
-	}
-
-	fmt.Printf("Processed %d files\n", processedFile)
-	return
-
 }
 
 func main() {
 	app := cli.NewApp()
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "storage"},
-		cli.StringFlag{Name: "imagespath"},
 	}
-	app.Action = doInsertAndServe
+	app.Action = func(c *cli.Context) {
+		storagePath := c.String("storage")
+		store, err := storage.OpenCannylsStorage(storagePath)
+		if err != nil {
+			return
+		}
+		defer store.Close()
+		ServeStore(store)
+	}
 
 	err := app.Run(os.Args)
 	if err != nil {

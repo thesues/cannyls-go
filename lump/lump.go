@@ -26,6 +26,12 @@ func FromBytes(vec []byte) (LumpId, error) {
 	return LumpId{lo: n}, nil
 }
 
+func (id LumpId) Inc() LumpId {
+	return LumpId{
+		lo: id.lo + 1,
+	}
+}
+
 func FromString(s string) (LumpId, error) {
 	n, err := strconv.ParseUint(s, 16, 64)
 	if err != nil {

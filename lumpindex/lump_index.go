@@ -2,6 +2,7 @@ package lumpindex
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
@@ -64,6 +65,15 @@ func (index *LumpIndex) DeleteRange(start lump.LumpId, end lump.LumpId) {
 func (index *LumpIndex) Min() (id lump.LumpId, ok bool) {
 	var n uint64
 	n, _, ok = index.tree.First(0)
+	if ok {
+		id = lump.FromU64(0, n)
+	}
+	return
+}
+
+func (index *LumpIndex) Max() (id lump.LumpId, ok bool) {
+	var n uint64
+	n, _, ok = index.tree.Last(math.MaxUint64)
 	if ok {
 		id = lump.FromU64(0, n)
 	}

@@ -4,14 +4,17 @@ import (
 	"fmt"
 
 	"errors"
-	"github.com/thesues/cannyls-go/block"
-	"github.com/thesues/cannyls-go/lump"
-	"github.com/thesues/cannyls-go/storage"
-	"github.com/urfave/cli"
 	"io"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/dustin/go-humanize"
+	"github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/lump"
+	"github.com/thesues/cannyls-go/nvm"
+	"github.com/thesues/cannyls-go/storage"
+	"github.com/urfave/cli"
 )
 
 func createCannyls(c *cli.Context) error {
@@ -28,8 +31,30 @@ func createCannyls(c *cli.Context) error {
 	return nil
 }
 
+func printHeader(header nvm.StorageHeader) {
+	fmt.Println("===cannyls header===")
+	fmt.Printf("UUID  %v\n", header.UUID)
+	fmt.Printf("Block Size %d \n", header.BlockSize.AsU16())
+	fmt.Printf("Version %d %d \n", header.MajorVersion, header.MinorVersion)
+	fmt.Printf("Journal Region Size %d, for short %s\n", header.JournalRegionSize, humanize.Bytes(header.JournalRegionSize))
+	fmt.Printf("Data    Region Size %d, for short %s\n", header.DataRegionSize, humanize.Bytes(header.DataRegionSize))
+}
+
 func headerCannyls(c *cli.Context) (err error) {
+	tryOpen := c.Bool("open")
 	path := c.String("storage")
+
+	//do not restore index
+	if tryOpen == false {
+		fileNVM, header, err := nvm.Open(path)
+		if err != nil {
+			return err
+		}
+		fileNVM.Close()
+		printHeader(*header)
+		return err
+	}
+
 	store, err := storage.OpenCannylsStorage(path)
 	if err != nil {
 		return err
@@ -37,11 +62,7 @@ func headerCannyls(c *cli.Context) (err error) {
 	defer store.Close()
 
 	header := store.Header()
-	fmt.Println("===cannyls header===")
-	fmt.Printf("Block Size %d \n", header.BlockSize.AsU16())
-	fmt.Printf("Version %d %d \n", header.MajorVersion, header.MinorVersion)
-	fmt.Printf("Journal Region Size %d\n", header.JournalRegionSize)
-	fmt.Printf("Data    Region Size %d\n", header.DataRegionSize)
+	printHeader(header)
 	return
 }
 
@@ -354,6 +375,7 @@ func main() {
 			Usage: "Header --storage path",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
+				cli.BoolTFlag{Name: "Open"},
 			},
 			Action: headerCannyls,
 		},
