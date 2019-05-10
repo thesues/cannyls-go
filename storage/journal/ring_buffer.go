@@ -190,20 +190,20 @@ func (iter DequeueIter) PopFront() (entry JournalEntry, err error) {
 
 /*Use buffer and update tail*/
 type BufferedIter struct {
-	readBuf io.ReadSeeker
-	ring    *JournalRingBuffer
+	fastReader readahead.ReadSeekCloser
+	ring       *JournalRingBuffer
 }
 
 //Update the ring.tail
 func (iter BufferedIter) PopFront() (entry JournalEntry, err error) {
-	record, err := ReadRecordFrom(iter.readBuf)
+	record, err := ReadRecordFrom(iter.fastReader)
 	if err != nil {
 		return JournalEntry{}, err
 	}
 	switch record.(type) {
 	case GoToFront:
 		iter.ring.tail = 0
-		iter.readBuf.Seek(0, io.SeekStart)
+		iter.fastReader.Seek(0, io.SeekStart)
 		return iter.PopFront()
 	case EndOfRecords:
 		//this will not update ring.tail
@@ -216,6 +216,10 @@ func (iter BufferedIter) PopFront() (entry JournalEntry, err error) {
 		iter.ring.tail = entry.End()
 		return entry, nil
 	}
+}
+
+func (iter BufferedIter) Close() {
+	iter.fastReader.Close()
 }
 
 /*No buffer and update nothing*/
@@ -257,8 +261,8 @@ func (ring *JournalRingBuffer) BufferedIter() BufferedIter {
 		panic(fmt.Sprintf("panic in new DequeueIter %+v", err))
 	}
 	return BufferedIter{
-		ring:    ring,
-		readBuf: ra,
+		ring:       ring,
+		fastReader: ra,
 	}
 }
 

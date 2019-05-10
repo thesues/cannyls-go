@@ -2,11 +2,12 @@ package journal
 
 import (
 	"fmt"
+	"io"
+
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/util"
-	"io"
 )
 
 var _ = fmt.Println
@@ -88,6 +89,7 @@ func (jb *JournalNvmBuffer) Read(buf []byte) (n int, err error) {
 	end := util.Min(uint64(innerReadSize), start+uint64(len(buf)))
 	readSize := end - start
 
+	//fmt.Printf("inner read size: %d,buf len %d, readSize %d, start: %d, end :%d\n", innerReadSize, len(buf), readSize, start, end)
 	copy(buf[:readSize], jb.readBuf.AsBytes()[start:end])
 	jb.position += readSize
 	return int(readSize), nil

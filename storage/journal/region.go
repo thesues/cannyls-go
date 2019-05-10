@@ -3,6 +3,8 @@ package journal
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
+
 	"github.com/phf/go-queue/queue"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
@@ -10,7 +12,6 @@ import (
 	"github.com/thesues/cannyls-go/lumpindex"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
-	"io"
 )
 
 const (
@@ -108,6 +109,9 @@ func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 			panic("never be here")
 		}
 	}
+	//this iter has more than one goroutine to read data from nvm
+	//It must be sure all the goroutines are closed before normal operations
+	iter.Close()
 }
 
 func (journal *JournalRegion) append(index *lumpindex.LumpIndex, record JournalRecord) error {
@@ -155,9 +159,12 @@ func (Journal *JournalRegion) isGarbage(index *lumpindex.LumpIndex, entry Journa
 
 		return dataPortion != v.DataPortion
 	case EmbedRecord:
+		//not found in current index, is garbage
 		if p, err = index.Get(v.LumpID); err != nil {
 			return true
 		}
+
+		//EmbedRecord must be a JournalPortion, if not , is garbage
 		if journalPortion, ok = p.(portion.JournalPortion); !ok {
 			return true
 		}
@@ -166,7 +173,7 @@ func (Journal *JournalRegion) isGarbage(index *lumpindex.LumpIndex, entry Journa
 		} else {
 			return true
 		}
-	default:
+	default: /*delete, delete range are garbage*/
 		return true
 	}
 }
@@ -321,7 +328,7 @@ func (journal *JournalRegion) gcAllEntriesInQueue(index *lumpindex.LumpIndex) {
 }
 
 func (journal *JournalRegion) JournalEntries() (uint64, uint64, uint64, []JournalEntry) {
-	entries := make([]JournalEntry, 0)
+	entries := make([]JournalEntry, 0, 100)
 	iter := journal.ring.ReadIter()
 	for {
 		entry, err := iter.PopFront()

@@ -41,11 +41,11 @@ func printHeader(header nvm.StorageHeader) {
 }
 
 func headerCannyls(c *cli.Context) (err error) {
-	tryOpen := c.Bool("open")
+	replay := c.Bool("replay")
 	path := c.String("storage")
 
 	//do not restore index
-	if tryOpen == false {
+	if replay == false {
 		fileNVM, header, err := nvm.Open(path)
 		if err != nil {
 			return err
@@ -375,7 +375,7 @@ func main() {
 			Usage: "Header --storage path",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
-				cli.BoolTFlag{Name: "Open"},
+				cli.BoolTFlag{Name: "replay"},
 			},
 			Action: headerCannyls,
 		},

@@ -36,7 +36,7 @@ type Storage struct {
 func OpenCannylsStorage(path string) (*Storage, error) {
 	file, header, err := nvm.Open(path)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	index := lumpindex.NewIndex()

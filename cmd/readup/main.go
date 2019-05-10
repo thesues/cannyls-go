@@ -236,7 +236,6 @@ func ServeStore(store *storage.Storage) {
 				c.Stream(func(w io.Writer) bool {
 					_, err := w.Write(out.data)
 					if err != nil {
-						fmt.Println(err)
 						return true
 					}
 					return false
