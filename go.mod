@@ -3,8 +3,6 @@ module github.com/thesues/cannyls-go
 go 1.12
 
 require (
-	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
-	github.com/codegangsta/martini v0.0.0-20170121215854-22fa46961aab // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/gin-gonic/gin v1.4.0
 	github.com/google/btree v1.0.0

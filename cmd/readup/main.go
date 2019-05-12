@@ -63,18 +63,13 @@ type DeleteRequest struct {
 }
 
 var (
-	TimeoutError = errors.New("process timeout")
-	NoKeyError   = errors.New("no more files")
+	TimeoutError       = errors.New("process timeout")
+	NoKeyError         = errors.New("no more files")
+	NoLumpIdSpaceError = errors.New("all lumpID is Used")
 )
 
-func chooseID(store *storage.Storage) lump.LumpId {
-	id, have := store.MaxId()
-	if have == false {
-		id = lump.FromU64(0, 0)
-	} else {
-		id = id.Inc()
-	}
-	return id
+func chooseID(store *storage.Storage) (lump.LumpId, bool) {
+	return store.GenerateEmptyId()
 }
 
 func handleGetRequest(store *storage.Storage, request GetRequest) {
@@ -156,8 +151,13 @@ func handlePutRequest(store *storage.Storage, request PutRequest) {
 	}
 
 	var id lump.LumpId = lump.FromU64(0, request.id)
+	var have bool
 	if request.isAutoId {
-		id = chooseID(store)
+		id, have = chooseID(store)
+		if !have {
+			request.resultChan <- PutResult{id.U64(), NoLumpIdSpaceError}
+			return
+		}
 	}
 
 	_, err := store.Put(id, request.data)

@@ -1,3 +1,4 @@
+export GOPROXY=https://goproxy.cn
 all:test
 build:
 	git submodule update --init

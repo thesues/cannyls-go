@@ -152,6 +152,23 @@ func (store *Storage) MaxId() (lump.LumpId, bool) {
 	return store.index.Max()
 }
 
+func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
+	id, have = store.MaxId()
+	if have == false {
+		id = lump.FromU64(0, 0)
+		return
+	} else {
+		//if the ID is max, fallback to the front to find a new ID
+		if id.IsMax() {
+			id, have = store.index.FirstEmpty()
+			return
+		} else {
+			id = id.Inc()
+			return
+		}
+	}
+}
+
 func (store *Storage) JournalGC() {
 	store.journalRegion.GcAllEntries(store.index)
 }

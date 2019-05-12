@@ -3,6 +3,7 @@ package lump
 import (
 	"encoding/binary"
 	"io"
+	"math"
 
 	"strconv"
 
@@ -30,6 +31,10 @@ func (id LumpId) Inc() LumpId {
 	return LumpId{
 		lo: id.lo + 1,
 	}
+}
+
+func (id LumpId) IsMax() bool {
+	return id.lo == math.MaxUint64
 }
 
 func FromString(s string) (LumpId, error) {
@@ -90,30 +95,6 @@ type LumpData struct {
 type LumpEmbededData struct {
 	Inner []byte
 }
-
-/*
-func NewLumpDataUnaligned(buf []byte) (*LumpData, error) {
-	if len(buf) > LUMP_MAX_SIZE {
-		return nil, errors.Wrapf(internalerror.InvalidInput, "lump data is too big %d", len(buf))
-	}
-	return &LumpData{
-		inner:     buf,
-		innerType: DataRegionUnaligned,
-	}, nil
-}
-*/
-
-/*
-func NewLumpDataEmbedded(buf []byte) (*LumpData, error) {
-	if len(buf) > MAX_EMBEDDED_SIZE {
-		return nil, errors.Wrapf(internalerror.InvalidInput, "lump data is too big %d", len(buf))
-	}
-	return &LumpData{
-		inner:     buf,
-		innerType: JournalRegion,
-	}, nil
-}
-*/
 
 //TODO, to be aligned at upper
 func NewLumpDataAligned(size int, blockSize block.BlockSize) LumpData {

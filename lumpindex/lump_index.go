@@ -73,7 +73,17 @@ func (index *LumpIndex) Min() (id lump.LumpId, ok bool) {
 
 func (index *LumpIndex) Max() (id lump.LumpId, ok bool) {
 	var n uint64
+	ok = false
 	n, _, ok = index.tree.Last(math.MaxUint64)
+	if ok {
+		id = lump.FromU64(0, n)
+	}
+	return
+}
+
+func (index *LumpIndex) FirstEmpty() (id lump.LumpId, ok bool) {
+	ok = false
+	n, ok := index.tree.FirstEmpty(0)
 	if ok {
 		id = lump.FromU64(0, n)
 	}
