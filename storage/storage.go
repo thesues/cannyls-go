@@ -52,7 +52,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	fmt.Printf("%v Start to restore index\n", time.Now())
 	journalRegion.RestoreIndex(index)
 	fmt.Printf("%v End to restore index\n", time.Now())
-	fmt.Printf("index is %d", index.MemoryUsed())
+	fmt.Printf("index's mem is %d\n", index.MemoryUsed())
 	id, _ := index.Min()
 	fmt.Printf("min is %d\n", id.U64())
 	id, _ = index.Max()
