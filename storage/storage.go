@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"time"
+
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/lumpindex"
@@ -47,10 +49,19 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 		return nil, err
 	}
 
+	fmt.Printf("%v Start to restore index\n", time.Now())
 	journalRegion.RestoreIndex(index)
+	fmt.Printf("%v End to restore index\n", time.Now())
+	fmt.Printf("index is %d", index.MemoryUsed())
+	id, _ := index.Min()
+	fmt.Printf("min is %d\n", id.U64())
+	id, _ = index.Max()
+	fmt.Printf("max is %d\n", id.U64())
 	//use JudyAlloc as default
 	alloc := allocator.NewJudyAlloc()
+	fmt.Printf("%v Start to restore allocator\n", time.Now())
 	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
+	fmt.Printf("%v End to restore allocator\n", time.Now())
 	dataRegion := NewDataRegion(alloc, dataNVM)
 
 	return &Storage{

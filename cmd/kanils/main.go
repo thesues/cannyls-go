@@ -44,6 +44,7 @@ func headerCannyls(c *cli.Context) (err error) {
 	replay := c.Bool("replay")
 	path := c.String("storage")
 
+	fmt.Println(replay)
 	//do not restore index
 	if replay == false {
 		fileNVM, header, err := nvm.Open(path)
@@ -155,9 +156,10 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 
 	count := c.Uint64("count")
 	size := c.Uint64("size")
-	always := c.Bool("always")
-	sync := c.Bool("sync")
+	always := c.BoolT("always")
+	sync := c.BoolT("sync")
 
+	fmt.Printf("Benching cannyls : embed data?:%v, sync?: %v\n", !always, sync)
 	if count == 0 || size == 0 {
 		return errors.New("argu count or size is zero")
 	}
@@ -372,7 +374,7 @@ func main() {
 		},
 		{
 			Name:  "Header",
-			Usage: "Header --storage path",
+			Usage: "Header --storage path --replay <true> ",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
 				cli.BoolTFlag{Name: "replay"},
