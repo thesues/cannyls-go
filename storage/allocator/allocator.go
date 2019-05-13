@@ -19,6 +19,7 @@ type DataPortionAlloc interface {
 	Release(p portion.DataPortion)
 	RestoreFromIndex(blockSize block.BlockSize,
 		capacityInByte uint64, vec []portion.DataPortion)
+	MemoryUsed() uint64
 }
 
 //TODO: Use ceph bitmap algorithm
@@ -39,6 +40,10 @@ func BuildBtreeDataPortionAlloc(capacitySector uint32) *BtreeDataPortionAlloc {
 	alloc := NewBtreeAlloc()
 	alloc.addFreePortion(portion.NewFreePortion(address.AddressFromU32(0), capacitySector))
 	return alloc
+}
+
+func (alloc *BtreeDataPortionAlloc) MemoryUsed() uint64 {
+	return 0
 }
 
 func (alloc *BtreeDataPortionAlloc) addFreePortion(free portion.FreePortion) {

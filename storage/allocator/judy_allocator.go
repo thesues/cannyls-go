@@ -114,6 +114,10 @@ func BuildJudyAlloc(capacitySector uint32) *JudyPortionAlloc {
 	return alloc
 }
 
+func (alloc *JudyPortionAlloc) MemoryUsed() uint64 {
+	return alloc.startBasedTree.MemoryUsed() + alloc.sizeBasedTree.MemoryUsed()
+}
+
 func (alloc *JudyPortionAlloc) Display() {
 	fmt.Printf("==Size Based Tree==\n")
 	index, ok := alloc.sizeBasedTree.First(0)
