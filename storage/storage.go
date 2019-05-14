@@ -174,7 +174,9 @@ func (store *Storage) MaxId() (lump.LumpId, bool) {
 func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
 	id, have = store.MaxId()
 	if have == false {
+		//the store is empty, use 0 as the first id
 		id = lump.FromU64(0, 0)
+		have = true
 		return
 	} else {
 		//if the ID is max, fallback to the front to find a new ID
