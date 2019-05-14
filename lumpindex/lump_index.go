@@ -99,6 +99,30 @@ func (index *LumpIndex) List() []lump.LumpId {
 	}
 	return vec
 }
+
+//WARNING: this function returns judy.Judy1, It can not be released by go gc.
+//the developer is responsible to free it
+//judyPortionArray is ordered by start of each portion
+func (index *LumpIndex) JudyDataPortions() *judy.Judy1 {
+	judyPortionArray := judy.Judy1{}
+	var judyPoriton uint64
+
+	judyPortionArray.Set(0)
+	indexNum, value, ok := index.tree.First(0)
+	for ok {
+		if p, isDataPortion := fromValueToPortion(value); isDataPortion {
+			judyPoriton = fromDataPortionToJudy(p.(portion.DataPortion))
+			judyPortionArray.Set(judyPoriton)
+		}
+		indexNum, value, ok = index.tree.Next(indexNum)
+	}
+	return &judyPortionArray
+}
+
+/*
+Loop all the index, if it's a Dataportion(not a Journalportion), It must occupy
+some part of the disk, Append this DataPortion to a
+*/
 func (index *LumpIndex) DataPortions() []portion.DataPortion {
 	n := index.tree.CountAll()
 	vec := make([]portion.DataPortion, 1, 100000+n)
@@ -143,4 +167,9 @@ func fromValueToPortion(value uint64) (p portion.Portion, isDataPortion bool) {
 		isDataPortion = true
 	}
 	return
+}
+
+//returns a JudyPorton
+func fromDataPortionToJudy(p portion.DataPortion) uint64 {
+	return (p.Start.AsU64() << 24) | uint64(p.Len)
 }

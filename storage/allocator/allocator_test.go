@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
 )
 
@@ -101,4 +102,9 @@ func DoTestAllocateRelease(t *testing.T, alloc DataPortionAlloc) {
 
 func fportion(addr uint64, size uint16) portion.DataPortion {
 	return portion.NewDataPortion(addr, size)
+}
+
+func lumpidnum(n int) lump.LumpId {
+	l := lump.FromU64(0, uint64(n))
+	return l
 }

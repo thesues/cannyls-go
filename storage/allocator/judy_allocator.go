@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 
+	"math"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/block"
@@ -108,6 +110,7 @@ func NewJudyAlloc() *JudyPortionAlloc {
 	return alloc
 }
 
+//capacitySector will always less than (1<<24),
 func BuildJudyAlloc(capacitySector uint32) *JudyPortionAlloc {
 	alloc := NewJudyAlloc()
 	alloc.addPortion(newJudyPortion(address.AddressFromU64(0), capacitySector))
@@ -118,24 +121,40 @@ func (alloc *JudyPortionAlloc) MemoryUsed() uint64 {
 	return alloc.startBasedTree.MemoryUsed() + alloc.sizeBasedTree.MemoryUsed()
 }
 
-func (alloc *JudyPortionAlloc) Display() {
-	fmt.Printf("==Size Based Tree==\n")
+//for debug
+func (alloc *JudyPortionAlloc) allPortions() (sizeBased []JudyPortion, startBased []JudyPortion) {
+	sizeBased = make([]JudyPortion, 0, alloc.sizeBasedTree.CountAll())
+	startBased = make([]JudyPortion, 0, alloc.startBasedTree.CountAll())
+
 	index, ok := alloc.sizeBasedTree.First(0)
 	for ok {
 		p := fromSizebasedToJudy(index)
-		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
+		sizeBased = append(sizeBased, p)
 		index, ok = alloc.sizeBasedTree.Next(index)
 	}
-
-	fmt.Printf("==End Based Tree==\n")
 
 	index, ok = alloc.startBasedTree.First(0)
 	for ok {
 		p := JudyPortion(index)
-		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
+		startBased = append(startBased, p)
 		index, ok = alloc.startBasedTree.Next(index)
 	}
 	return
+}
+
+func (alloc *JudyPortionAlloc) Display() {
+
+	sizeBased, startBased := alloc.allPortions()
+	fmt.Printf("==Size Based Tree==\n")
+	for _, p := range sizeBased {
+		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
+	}
+
+	fmt.Printf("==Start Based Tree==\n")
+
+	for _, p := range startBased {
+		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
+	}
 }
 
 func (alloc *JudyPortionAlloc) Allocate(size uint16) (free portion.DataPortion, err error) {
@@ -226,6 +245,37 @@ func (alloc *JudyPortionAlloc) mergeFreePortions(free JudyPortion) (merged JudyP
 		}
 	}
 	return
+}
+
+func (alloc *JudyPortionAlloc) RestoreFromIndexWithJudy(blockSize block.BlockSize,
+	capacityInByte uint64, judyArray *judy.Judy1) {
+	defer judyArray.Free()
+
+	var index uint64
+	var ok bool
+	tail := capacityInByte / uint64(blockSize.AsU16())
+	//loop for every occupied area from end to start
+	index, ok = judyArray.Last(math.MaxUint64)
+	for ok {
+		p := JudyPortion(index)
+
+		for p.End().AsU64() < tail {
+			delta := tail - p.End().AsU64()
+
+			size := util.Min(0xFFFFFF, delta)
+
+			tail -= size
+
+			start := address.AddressFromU64(tail)
+
+			free := newJudyPortion(start, uint32(size))
+			alloc.addPortion(free)
+
+		}
+		tail = p.Start().AsU64()
+
+		index, ok = judyArray.Prev(index)
+	}
 }
 
 //almost the same with RestoreFromIndex of BtreeDataPortionAlloc
