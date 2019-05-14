@@ -1,4 +1,4 @@
-# cannyls-go
+# Cannyls-go
 
 Cannyls-go is golang re-implenment for cannyls(https://github.com/frugalos/cannyls)
 
@@ -35,11 +35,10 @@ A HTTP server with cannyls-go as storage backend. HTTP API could be used to uplo
 
 ## Main differences bewteen origin cannyls
 
-1. lumpid is 64bit, not 126bit
+1. lumpid is 64bit, not 128bit
 2. Origin cannyls use native rust standard library btreemap, cannyls-go uses libjudy(http://judy.sourceforge.net/) as index to 
 save more memory.
 3. Origin cannyls has a deadline schedule queue. Cannyls-go uses golang channel, leave it for user to implement its own strategy
 
 
 ## Benchmark
-
