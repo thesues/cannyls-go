@@ -40,6 +40,15 @@ func printHeader(header nvm.StorageHeader) {
 	fmt.Printf("Data    Region Size %d, for short %s\n", header.DataRegionSize, humanize.Bytes(header.DataRegionSize))
 }
 
+func printUsage(usage storage.StorageUsage) {
+	fmt.Println("===cannyls usage===")
+	fmt.Printf("file counts %v\n", usage.FileCounts)
+	fmt.Printf("Min index %d \n", usage.MinIndex)
+	fmt.Printf("Max index %d \n", usage.MaxIndex)
+	fmt.Printf("Free Bytes %s \n", humanize.Bytes(usage.FreeBytes))
+	fmt.Printf("Raw Size   %s \n", humanize.Bytes(usage.CurrentFileSize))
+}
+
 func headerCannyls(c *cli.Context) (err error) {
 	replay := c.Bool("replay")
 	path := c.String("storage")
@@ -64,6 +73,7 @@ func headerCannyls(c *cli.Context) (err error) {
 
 	header := store.Header()
 	printHeader(header)
+	printUsage(store.Usage())
 	return
 }
 

@@ -33,6 +33,17 @@ type Storage struct {
 	journalRegion *journal.JournalRegion
 	index         *lumpindex.LumpIndex
 	innerNVM      nvm.NonVolatileMemory
+	alloc         allocator.DataPortionAlloc
+}
+
+type StorageUsage struct {
+	JournalCapacity uint64 `json:"jouranlcapacity"`
+	DataCapacity    uint64 `json:"datacapacity"`
+	FileCounts      uint64 `json:"filecounts"`
+	MinIndex        int64  `json:"minindex"`
+	MaxIndex        int64  `json:"maxindex"`
+	FreeBytes       uint64 `json:"freebytes"`
+	CurrentFileSize uint64 `json:"currentfilesize"`
 }
 
 func OpenCannylsStorage(path string) (*Storage, error) {
@@ -78,6 +89,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 		journalRegion: journalRegion,
 		index:         index,
 		innerNVM:      file,
+		alloc:         alloc,
 	}, nil
 
 }
@@ -161,6 +173,33 @@ func (store *Storage) SetAutomaticGcMode(gc bool) {
 
 func (store *Storage) List() []lump.LumpId {
 	return store.index.List()
+}
+
+func (store *Storage) Usage() StorageUsage {
+
+	var min, max int64
+
+	if id, have := store.index.Min(); have {
+		min = int64(id.U64())
+	} else {
+		min = -1
+	}
+
+	if id, have := store.index.Max(); have {
+		max = int64(id.U64())
+	} else {
+		max = -1
+	}
+
+	return StorageUsage{
+		JournalCapacity: store.Header().JournalRegionSize,
+		DataCapacity:    store.Header().DataRegionSize,
+		FileCounts:      store.index.Count(),
+		MinIndex:        min,
+		MaxIndex:        max,
+		FreeBytes:       store.alloc.FreeCount() * uint64(store.Header().BlockSize.AsU16()),
+		CurrentFileSize: uint64(store.innerNVM.RawSize()),
+	}
 }
 
 func (store *Storage) MinId() (lump.LumpId, bool) {

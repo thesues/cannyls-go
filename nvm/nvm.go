@@ -15,6 +15,7 @@ type NonVolatileMemory interface {
 	Capacity() uint64
 	BlockSize() block.BlockSize
 	Split(position uint64) (NonVolatileMemory, NonVolatileMemory, error)
+	RawSize() int64
 }
 
 var (

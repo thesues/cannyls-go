@@ -1,10 +1,11 @@
 package nvm
 
 import (
+	"io"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
-	"io"
 )
 
 type MemoryNVM struct {
@@ -37,6 +38,10 @@ func (memory *MemoryNVM) Position() uint64 {
 
 func (memory *MemoryNVM) Capacity() uint64 {
 	return uint64(len(memory.vec))
+}
+
+func (memory *MemoryNVM) RawSize() int64 {
+	return -1
 }
 
 func (memory *MemoryNVM) Split(p uint64) (sp1 NonVolatileMemory, sp2 NonVolatileMemory, err error) {

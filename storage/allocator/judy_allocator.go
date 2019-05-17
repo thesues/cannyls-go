@@ -19,6 +19,7 @@ import (
 type JudyPortionAlloc struct {
 	startBasedTree judy.Judy1
 	sizeBasedTree  judy.Judy1
+	freeCount      uint64
 }
 
 type JudyPortion uint64
@@ -106,6 +107,7 @@ func NewJudyAlloc() *JudyPortionAlloc {
 	alloc := &JudyPortionAlloc{
 		startBasedTree: judy.Judy1{},
 		sizeBasedTree:  judy.Judy1{},
+		freeCount:      0,
 	}
 	return alloc
 }
@@ -179,14 +181,20 @@ func (alloc *JudyPortionAlloc) Allocate(size uint16) (free portion.DataPortion, 
 
 }
 
+func (alloc *JudyPortionAlloc) FreeCount() uint64 {
+	return alloc.freeCount
+}
+
 func (alloc *JudyPortionAlloc) deletePortion(p JudyPortion) {
 	alloc.startBasedTree.Unset(uint64(p))
 	alloc.sizeBasedTree.Unset(uint64(p.ToSizeBasedUint64()))
+	alloc.freeCount -= uint64(p.Len())
 }
 
 func (alloc *JudyPortionAlloc) addPortion(p JudyPortion) {
 	alloc.startBasedTree.Set(uint64(p))
 	alloc.sizeBasedTree.Set(uint64(p.ToSizeBasedUint64()))
+	alloc.freeCount += uint64(p.Len())
 }
 
 func (alloc *JudyPortionAlloc) Release(p portion.DataPortion) {

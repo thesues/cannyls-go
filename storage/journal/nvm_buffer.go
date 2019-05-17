@@ -47,6 +47,10 @@ func (jb *JournalNvmBuffer) Position() uint64 {
 	return jb.position
 }
 
+func (jb *JournalNvmBuffer) RawSize() int64 {
+	return -1
+}
+
 func (jb *JournalNvmBuffer) Split(p uint64) (nvm.NonVolatileMemory, nvm.NonVolatileMemory, error) {
 	panic("Journal Buffer should not call Split!")
 }

@@ -90,6 +90,10 @@ func (index *LumpIndex) FirstEmpty() (id lump.LumpId, ok bool) {
 	return
 }
 
+func (index *LumpIndex) Count() uint64 {
+	return index.tree.CountAll()
+}
+
 func (index *LumpIndex) List() []lump.LumpId {
 	vec := make([]lump.LumpId, 0, 1024)
 	indexNum, _, ok := index.tree.First(0)

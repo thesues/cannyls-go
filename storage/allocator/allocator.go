@@ -17,15 +17,20 @@ type DataPortionAlloc interface {
 	Display()
 	Allocate(size uint16) (free portion.DataPortion, err error)
 	Release(p portion.DataPortion)
-	RestoreFromIndex(blockSize block.BlockSize,
-		capacityInByte uint64, vec []portion.DataPortion)
+	RestoreFromIndex(blockSize block.BlockSize, capacityInByte uint64, vec []portion.DataPortion)
 	MemoryUsed() uint64
+	FreeCount() uint64
 }
 
 //TODO: Use ceph bitmap algorithm
 type BtreeDataPortionAlloc struct {
 	sizeToFree *btree.BTree
 	endToFree  *btree.BTree
+	freeCount  uint64
+}
+
+func (alloc *BtreeDataPortionAlloc) FreeCount() uint64 {
+	return alloc.freeCount
 }
 
 func NewBtreeAlloc() *BtreeDataPortionAlloc {
@@ -49,11 +54,13 @@ func (alloc *BtreeDataPortionAlloc) MemoryUsed() uint64 {
 func (alloc *BtreeDataPortionAlloc) addFreePortion(free portion.FreePortion) {
 	alloc.sizeToFree.ReplaceOrInsert(portion.SizeBasedPortion(free))
 	alloc.endToFree.ReplaceOrInsert(portion.EndBasedPortion(free))
+	alloc.freeCount += uint64(free.Len())
 }
 
 func (alloc *BtreeDataPortionAlloc) deleteFreePortion(free portion.FreePortion) {
 	alloc.sizeToFree.Delete(portion.SizeBasedPortion(free))
 	alloc.endToFree.Delete(portion.EndBasedPortion(free))
+	alloc.freeCount -= uint64(free.Len())
 }
 
 func (alloc *BtreeDataPortionAlloc) Display() {
