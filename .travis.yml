@@ -1,13 +1,14 @@
 language: go
 
 go:
-  - 1.12
+  - "1.12.5"
 
 before_install:
   - sudo apt-get update 
   - sudo apt-get install build-essential
 
 script:
+  - export GO111MODULE=on
   - make test
 
 after_success:
