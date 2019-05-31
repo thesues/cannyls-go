@@ -73,13 +73,15 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	alloc := allocator.NewJudyAlloc()
 	fmt.Printf("%v :Start to restore allocator\n", time.Now())
 
-	/*  use RestoreFromIndexWithJudy as default
+	//  use RestoreFromIndex as default
+	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
 	/*
-		alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
-		RestoreFromIndexWithJudy is 10% slower than RestoreFromIndex, But it takes significant less
+	alloc.RestoreFromIndexWithJudy(file.BlockSize(), header.DataRegionSize, index.JudyDataPortions())
+
+	RestoreFromIndexWithJudy is 10% slower than RestoreFromIndex, But it takes significant less
 		memory.
 	*/
-	alloc.RestoreFromIndexWithJudy(file.BlockSize(), header.DataRegionSize, index.JudyDataPortions())
+
 	fmt.Printf("%v :End to restore allocator\n", time.Now())
 	dataRegion := NewDataRegion(alloc, dataNVM)
 

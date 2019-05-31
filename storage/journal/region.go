@@ -310,6 +310,7 @@ func (journal *JournalRegion) RunSideJobOnce(index *lumpindex.LumpIndex) {
 		for i := 0; i < GC_COUNT_IN_SIDE_JOB; i++ {
 			journal.gcOnce(index)
 		}
+		journal.trySync()
 	}
 }
 

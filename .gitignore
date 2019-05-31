@@ -3,3 +3,7 @@
 *.out
 *.log
 *.test
+cmd/kanils/kanils
+cmd/kanils/kanils-linux
+cmd/readup/readup
+cmd/readup/scripts/4kfile
