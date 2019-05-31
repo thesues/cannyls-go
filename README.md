@@ -1,3 +1,7 @@
+
+[![Build Status](https://travis-ci.org/thesues/cannyls-go.svg?branch=master)](https://travis-ci.org/thesues/cannyls-go)
+[![codecov](https://codecov.io/gh/thesues/cannyls-go/branch/master/graph/badge.svg)](https://codecov.io/gh/thesues/cannyls-go)
+
 # Cannyls-go
 
 Cannyls-go is golang re-implenment for cannyls(https://github.com/frugalos/cannyls)
