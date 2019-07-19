@@ -41,7 +41,7 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	var err error
 	flags = os.O_CREATE | os.O_RDWR
 
-	if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
+	if f, err = openFileWithDirectIO(path, flags, 0644); err != nil {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 	/*
