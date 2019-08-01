@@ -29,6 +29,11 @@ func fcntl(fd int, cmd int, arg int) (val int, err error) {
 	return
 }
 
+
+func fallocate(file *os.File, preallocate int64){
+	syscall.Fallocate(int(file.Fd()), 1, 0, preallocate)
+}
+
 func isDirectIO(val int) bool {
 	return (val & syscall.O_DIRECT) != 0
 }
