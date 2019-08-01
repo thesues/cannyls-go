@@ -65,3 +65,7 @@ https://github.com/apple/darwin-xnu/blob/master/bsd/sys/fcntl.h#L133
 func isExclusiveLock(path string, val int) bool {
 	return (val & 0x4000) != 0
 }
+
+func fallocate(file *os.File, preallocate int64){
+	//not implemented!!
+}
