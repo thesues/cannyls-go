@@ -57,7 +57,7 @@ func TestAllocatorJudyRestore(t *testing.T) {
 		Portion Size: 16765178, Start 12048, End: 16777226
 		Portion Size: 10, Start 16777236, End: 16777246
 	*/
-	sizeBased, startBased := jalloc.allPortions()
+	sizeBased, startBased, _ := jalloc.allPortions()
 	assert.Equal(t, 3, int(len(startBased)))
 	assert.Equal(t, 3, int(len(startBased)))
 
