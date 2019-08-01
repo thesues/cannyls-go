@@ -123,7 +123,7 @@ func handleRandomRequest(store *storage.Storage, request DeleteRequest) {
 		goto END
 	}
 
-	_, err = store.Delete(id)
+	_, _, err = store.Delete(id)
 	if err != nil {
 		response.err = err
 	}

@@ -87,7 +87,7 @@ func deleteCannyls(c *cli.Context) (err error) {
 
 	key := c.Uint64("key")
 	id := lump.FromU64(0, key)
-	if _, err = store.Delete(id); err != nil {
+	if _,_, err = store.Delete(id); err != nil {
 		return err
 	}
 
