@@ -282,7 +282,7 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 func (store *Storage) Put(lumpid lump.LumpId, lumpdata lump.LumpData) (updated bool, err error) {
 
 	err = nil
-	if updated, err = store.deleteIfExist(lumpid, false); err != nil {
+	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
 		return updated, err
 	}
 
@@ -301,27 +301,27 @@ func (store *Storage) Put(lumpid lump.LumpId, lumpdata lump.LumpData) (updated b
 }
 
 func (store *Storage) PutEmbed(lumpid lump.LumpId, data []byte) (updated bool, err error) {
-	if updated, err = store.deleteIfExist(lumpid, false); err != nil {
+	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
 		return
 	}
 	err = store.journalRegion.RecordEmbed(store.index, lumpid, data)
 	return
 }
 
-func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, err error) {
-	updated, err = store.deleteIfExist(lumpid, true)
+func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, size uint16, err error) {
+	updated, size, err = store.deleteIfExist(lumpid, true)
 	return
 }
 
-func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, error) {
+func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, uint16, error) {
 	p, err := store.index.Get(lumpid)
 
 	//if not exist
 	if err != nil {
-		return false, nil
+		return false, 0, nil
 	}
 
-	//Becase previous Get is ok, this Delete will surely success
+	//Because previous Get is ok, this Delete will surely success
 	if ok := store.index.Delete(lumpid); ok == false {
 		panic("Delete after Get failed, something bad happend")
 	}
@@ -329,9 +329,16 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, er
 	if doRecord {
 		store.journalRegion.RecordDelete(store.index, lumpid)
 	}
+
+	var releasedSize uint16
+
 	switch v := p.(type) {
 	case portion.DataPortion:
+		releasedSize = v.Len
 		store.dataRegion.Release(v)
+	case portion.JournalPortion:
+		releasedSize = v.Len
+
 	}
 
 	/*
@@ -344,7 +351,7 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, er
 			store.dataRegion.Release(v)
 		}
 	*/
-	return true, nil
+	return true, releasedSize, nil
 }
 
 func (store *Storage) JournalSync() {
