@@ -17,16 +17,17 @@ import (
 
 //the Tree here means a set
 type JudyPortionAlloc struct {
-	startBasedTree judy.Judy1
-	sizeBasedTree  judy.Judy1
-	freeCount      uint64
+	startBasedTree    judy.Judy1
+	sizeBasedTree     judy.Judy1
+	readyToBeReleased judy.Judy1
+	freeCount         uint64
 }
 
 type JudyPortion uint64
 
 /*
 JudyPortion format:
-JudyPortion could be sorted by end_address, JudyPortion is stored in endBasedTree
+JudyPortion could be sorted by start_address, JudyPortion is stored in endBasedTree
 64bit
 40            +    24
 start_address +    len
@@ -105,9 +106,10 @@ func (judy JudyPortion) ToSizeBasedUint64() uint64 {
 
 func NewJudyAlloc() *JudyPortionAlloc {
 	alloc := &JudyPortionAlloc{
-		startBasedTree: judy.Judy1{},
-		sizeBasedTree:  judy.Judy1{},
-		freeCount:      0,
+		startBasedTree:    judy.Judy1{},
+		sizeBasedTree:     judy.Judy1{},
+		readyToBeReleased: judy.Judy1{},
+		freeCount:         0,
 	}
 	return alloc
 }
@@ -120,13 +122,14 @@ func BuildJudyAlloc(capacitySector uint32) *JudyPortionAlloc {
 }
 
 func (alloc *JudyPortionAlloc) MemoryUsed() uint64 {
-	return alloc.startBasedTree.MemoryUsed() + alloc.sizeBasedTree.MemoryUsed()
+	return alloc.startBasedTree.MemoryUsed() + alloc.sizeBasedTree.MemoryUsed() + alloc.readyToBeReleased.MemoryUsed()
 }
 
 //for debug
-func (alloc *JudyPortionAlloc) allPortions() (sizeBased []JudyPortion, startBased []JudyPortion) {
+func (alloc *JudyPortionAlloc) allPortions() (sizeBased []JudyPortion, startBased []JudyPortion, readyToBeReleased []JudyPortion) {
 	sizeBased = make([]JudyPortion, 0, alloc.sizeBasedTree.CountAll())
 	startBased = make([]JudyPortion, 0, alloc.startBasedTree.CountAll())
+	readyToBeReleased = make([]JudyPortion, 0, alloc.readyToBeReleased.CountAll())
 
 	index, ok := alloc.sizeBasedTree.First(0)
 	for ok {
@@ -141,12 +144,21 @@ func (alloc *JudyPortionAlloc) allPortions() (sizeBased []JudyPortion, startBase
 		startBased = append(startBased, p)
 		index, ok = alloc.startBasedTree.Next(index)
 	}
+
+	index, ok = alloc.readyToBeReleased.First(0)
+	for ok {
+		p := JudyPortion(index)
+		readyToBeReleased = append(readyToBeReleased, p)
+		index, ok = alloc.readyToBeReleased.Next(index)
+	}
 	return
 }
 
 func (alloc *JudyPortionAlloc) Display() {
 
-	sizeBased, startBased := alloc.allPortions()
+
+	sizeBased, startBased, readyToBeReleased := alloc.allPortions()
+
 	fmt.Printf("==Size Based Tree==\n")
 	for _, p := range sizeBased {
 		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
@@ -155,6 +167,12 @@ func (alloc *JudyPortionAlloc) Display() {
 	fmt.Printf("==Start Based Tree==\n")
 
 	for _, p := range startBased {
+		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
+	}
+
+	fmt.Printf("== Ready to Release Tree==\n")
+
+	for _, p := range readyToBeReleased {
 		fmt.Printf("Portion Size: %d, Start %d, End: %d\n", p.Len(), p.Start(), p.End())
 	}
 }
@@ -177,7 +195,13 @@ func (alloc *JudyPortionAlloc) Allocate(size uint16) (free portion.DataPortion, 
 		}
 	}
 
-	return portion.DataPortion{}, errors.Wrap(internalerror.StorageFull, "failed to alloc portion from in-memory allocator")
+	//If allocation fails, empty the evictAllReadyPortion set.
+	//Make the write more sequentially 
+	if alloc.evictAllReadyPortion() == true {
+		return alloc.Allocate(size)
+	} else {
+		return portion.DataPortion{}, errors.Wrap(internalerror.StorageFull, "failed to alloc portion from in-memory allocator")
+	}
 
 }
 
@@ -197,17 +221,34 @@ func (alloc *JudyPortionAlloc) addPortion(p JudyPortion) {
 	alloc.freeCount += uint64(p.Len())
 }
 
-func (alloc *JudyPortionAlloc) Release(p portion.DataPortion) {
-	//check
-	if alloc.isOverlapedPortion(p) {
-		panic("allocate failed to allocate an overlap poriton")
+//loop over alloc.readyToBeReleased and real free all judyportion
+func (alloc *JudyPortionAlloc) evictAllReadyPortion() (evict bool) {
+	free, ok := alloc.readyToBeReleased.First(0)
+	for ok {
+		merged := alloc.mergeFreePortions(JudyPortion(free))
+		alloc.addPortion(merged)
+		alloc.readyToBeReleased.Unset(free)
+		free, ok = alloc.readyToBeReleased.Next(free)
+		evict = true
 	}
-	free := fromDataPortionToJudy(p)
-	merged := alloc.mergeFreePortions(free)
-	alloc.addPortion(merged)
+	return
 }
 
+func (alloc *JudyPortionAlloc) Release(p portion.DataPortion) {
+
+	if alloc.isOverlapedPortion(p) {
+		panic("allocate failed to release an overlap poriton")
+	}
+	free := fromDataPortionToJudy(p)
+	//put into ready-to-realase
+	alloc.readyToBeReleased.Set(uint64(free))
+
+}
+
+
 func (alloc *JudyPortionAlloc) isOverlapedPortion(p portion.DataPortion) bool {
+
+	//We should check both readyToBeReleased and startBasedTree
 	free := fromDataPortionToJudy(p)
 	search := newJudyPortion(free.End(), 0)
 
@@ -217,9 +258,18 @@ func (alloc *JudyPortionAlloc) isOverlapedPortion(p portion.DataPortion) bool {
 		return true
 	}
 
+	index, ok = alloc.readyToBeReleased.Prev(uint64(search))
+	if ok && JudyPortion(index).End() > free.Start() {
+		return true
+	}
+
 	//if free's end in the next portion
 	search = newJudyPortion(free.Start(), 0)
 	index, ok = alloc.startBasedTree.Next(uint64(search))
+	if ok && JudyPortion(index).Start() < free.End() {
+		return true
+	}
+	index, ok = alloc.readyToBeReleased.Next(uint64(search))
 	if ok && JudyPortion(index).Start() < free.End() {
 		return true
 	}
