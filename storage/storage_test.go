@@ -21,9 +21,25 @@ func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 	assert.FileExists(t, "test.lusf")
 }
 
+func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
+
+	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01)
+	storage.Put(lumpid("0000"), zeroedData(512*3+10))
+
+	updated, size, err := storage.Delete(lumpid("0000"))
+
+	assert.Nil(t, err)
+	assert.True(t, updated)
+	assert.Equal(t, uint32(512*4), size)
+
+	defer storage.Close()
+	defer os.Remove("tmp11.lusf")
+}
+
+
 func TestCreateCannylsStorageWork(t *testing.T) {
 	//10M
-	var size uint16
+	var size uint32
 	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01)
 	defer os.Remove("tmp11.lusf")
 
@@ -49,12 +65,12 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 	updated, size, err = storage.Delete(lumpid("00"))
 	assert.Nil(t, err)
 	assert.True(t, updated)
-	assert.Equal(t, uint16(5), size)
+	assert.Equal(t, uint32(5), size)
 
 	updated, size, err = storage.Delete(lumpid("00"))
 	assert.Nil(t, err)
 	assert.False(t, updated)
-	assert.Equal(t, uint16(0), size)
+	assert.Equal(t, uint32(0), size)
 
 	storage.PutEmbed(lumpid("00"), []byte("hello"))
 	storage.PutEmbed(lumpid("11"), []byte("world"))
@@ -66,6 +82,7 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 		storage.Delete(lumpid("22"))
 	}
 	storage.PutEmbed(lumpid("22"), []byte("hello, world"))
+
 
 	storage.Close()
 
