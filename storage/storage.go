@@ -308,12 +308,12 @@ func (store *Storage) PutEmbed(lumpid lump.LumpId, data []byte) (updated bool, e
 	return
 }
 
-func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, size uint16, err error) {
+func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, size uint32, err error) {
 	updated, size, err = store.deleteIfExist(lumpid, true)
 	return
 }
 
-func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, uint16, error) {
+func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, uint32, error) {
 	p, err := store.index.Get(lumpid)
 
 	//if not exist
@@ -330,14 +330,14 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, ui
 		store.journalRegion.RecordDelete(store.index, lumpid)
 	}
 
-	var releasedSize uint16
+	var releasedSize uint32
 
 	switch v := p.(type) {
 	case portion.DataPortion:
-		releasedSize = v.Len
+		releasedSize = uint32(v.Len) * uint32(store.innerNVM.BlockSize().AsU16())
 		store.dataRegion.Release(v)
 	case portion.JournalPortion:
-		releasedSize = v.Len
+		releasedSize = uint32(v.Len)
 
 	}
 
