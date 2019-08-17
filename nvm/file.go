@@ -71,7 +71,11 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		return nil, err
 	}
 
-	fallocate(f,int64(capacity))
+	if err = fallocate(f,int64(capacity)) ; err != nil {
+		f.Close()
+		os.Remove(path)
+		return nil, err
+	}
 
 	return &FileNVM{
 		file:            f,
