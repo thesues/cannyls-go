@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"math/rand"
+
 	"github.com/dustin/go-humanize"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
@@ -16,6 +18,7 @@ import (
 	"github.com/thesues/cannyls-go/storage"
 	"github.com/urfave/cli"
 )
+
 
 func createCannyls(c *cli.Context) error {
 	path := c.String("storage")
@@ -195,22 +198,28 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 				return
 			}
 		}
-		if sync {
-			store.JournalSync()
-		}
 
 		if read {
 			if m < marching {
 				keystore[m] = id
 				m++
 			} else {
+				n := 0
 				for _, i := range keystore {
-					if _, err = store.Get(i); err != nil {
-						return err
+					if rand.Float64() < 0.5 {
+						if _, _, err = store.Delete(i); err != nil {
+							return err
+						}
+						n += 1
 					}
 				}
 				m = 0
+				//fmt.Printf("done %d\n", n)
 			}
+		}
+
+		if sync {
+			store.JournalSync()
 		}
 	}
 
@@ -227,7 +236,7 @@ func createCannylsForBench(c *cli.Context) (store *storage.Storage, err error) {
 	capacityBytes := block.Min().CeilAlign(size * count * 2)
 
 	fmt.Printf("create cannyls... capacity is %s\n", bytesToString(capacityBytes))
-	store, err = storage.CreateCannylsStorage(path, capacityBytes, 0.01)
+	store, err = storage.CreateCannylsStorage(path, capacityBytes, 0.1)
 	if err != nil {
 		return
 	}

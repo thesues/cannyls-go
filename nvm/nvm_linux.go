@@ -30,8 +30,8 @@ func fcntl(fd int, cmd int, arg int) (val int, err error) {
 }
 
 
-func fallocate(file *os.File, preallocate int64){
-	syscall.Fallocate(int(file.Fd()), 1, 0, preallocate)
+func fallocate(file *os.File, preallocate int64) error {
+	return syscall.Fallocate(int(file.Fd()), 1, 0, preallocate)
 }
 
 func isDirectIO(val int) bool {
