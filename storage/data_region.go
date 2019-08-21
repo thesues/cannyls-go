@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
-	_ "github.com/thesues/cannyls-go/internalerror"
+	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
@@ -110,4 +111,40 @@ func (region *DataRegion) Get(portion portion.DataPortion) (lump.LumpData, error
 
 	ab.Resize(ab.Len() - padding_size - LUMP_DATA_TRAILER_SIZE)
 	return lump.NewLumpDataWithAb(ab), nil
+}
+
+//more friendly data portion read. only read up user required data.
+//the returned bytes could be less than length
+func (region *DataRegion) GetWithOffset(portion portion.DataPortion, startOffset uint32, length uint32) ([]byte, error) {
+
+	offset, len := portion.ShiftBlockToBytes(region.block_size)
+
+	if startOffset+length > len-LUMP_DATA_TRAILER_SIZE {
+		return nil, errors.Wrap(internalerror.InvalidInput, "given length is too big")
+	}
+
+	newReadStart := region.block_size.FloorAlign(offset + uint64(startOffset))
+	prefixPadding := startOffset % region.block_size.AsU32()
+
+	ab := block.NewAlignedBytes(int(length+prefixPadding), region.block_size)
+	ab.Align()
+
+	if _, err := region.nvm.Seek(int64(newReadStart), io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	if _, err := region.nvm.Read(ab.AsBytes()); err != nil {
+		return nil, err
+	}
+
+	//If length is small, and the read op does't reach the last block
+	if length+prefixPadding <= len-region.block_size.AsU32() {
+		return ab.AsBytes()[prefixPadding : prefixPadding+length], nil
+	}
+
+	//In this case, if length is too big(reach to the last block), prevent to read the padding data
+	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
+	realFileSize := util.Min32(ab.Len()-padding_size-LUMP_DATA_TRAILER_SIZE, prefixPadding+length)
+	return ab.AsBytes()[prefixPadding:realFileSize], nil
+
 }
