@@ -49,6 +49,10 @@ func (bs BlockSize) AsU16() uint16 {
 	return uint16(bs)
 }
 
+func (bs BlockSize) AsU32() uint32 {
+	return uint32(bs)
+}
+
 func (bs BlockSize) Contains(other BlockSize) bool {
 	return uint64(bs) >= uint64(other) && uint64(bs)%uint64(other) == 0
 }

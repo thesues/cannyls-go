@@ -76,10 +76,10 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	//  use RestoreFromIndex as default
 	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
 	/*
-	alloc.RestoreFromIndexWithJudy(file.BlockSize(), header.DataRegionSize, index.JudyDataPortions())
+		alloc.RestoreFromIndexWithJudy(file.BlockSize(), header.DataRegionSize, index.JudyDataPortions())
 
-	RestoreFromIndexWithJudy is 10% slower than RestoreFromIndex, But it takes significant less
-		memory.
+		RestoreFromIndexWithJudy is 10% slower than RestoreFromIndex, But it takes significant less
+			memory.
 	*/
 
 	fmt.Printf("%v :End to restore allocator\n", time.Now())
@@ -277,6 +277,26 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 	default:
 		panic("never here")
 	}
+}
+
+func (store *Storage) GetWithOffset(lumpId lump.LumpId, startOffset uint32, length uint32) ([]byte, error) {
+	p, err := store.index.Get(lumpId)
+	if err != nil {
+		return nil, err
+	}
+	switch v := p.(type) {
+	case portion.DataPortion:
+		return store.dataRegion.GetWithOffset(v, startOffset, length)
+	case portion.JournalPortion:
+		data, err := store.journalRegion.GetEmbededData(v)
+		if err != nil {
+			return nil, err
+		}
+		return data[startOffset : startOffset+length], nil
+	default:
+		panic("never here")
+	}
+
 }
 
 func (store *Storage) Put(lumpid lump.LumpId, lumpdata lump.LumpData) (updated bool, err error) {

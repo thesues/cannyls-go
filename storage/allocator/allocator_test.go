@@ -8,6 +8,31 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 )
 
+
+
+func TestAllocateJudyEvict(t *testing.T) {
+	alloc := BuildJudyAlloc(24)
+
+	alloc.Allocate(8)
+	alloc.Allocate(8)
+	alloc.Allocate(8)
+
+	_, err := alloc.Allocate(1)
+        assert.Error(t, err)
+
+	alloc.Release(fportion(0, 8))
+	alloc.Release(fportion(16, 8))
+
+
+	_, err = alloc.Allocate(10)
+        assert.Error(t, err)
+
+	alloc.Release(fportion(8, 8))
+	_, err = alloc.Allocate(24)
+        assert.Nil(t, err)
+
+}
+
 func TestAllocateBTree(t *testing.T) {
 	alloc := BuildBtreeDataPortionAlloc(24)
 	DoTestBTreeAllocate(t, alloc)
