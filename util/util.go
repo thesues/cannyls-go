@@ -1,7 +1,5 @@
 package util
 
-import ()
-
 func PutUINT64(buf []byte, n uint64) {
 	buf[0] = byte(n>>56) & 0xff
 	buf[1] = byte(n>>48) & 0xff
@@ -96,6 +94,14 @@ func GetUINT40(buf []byte) uint64 {
 }
 
 func Min(x uint64, y uint64) uint64 {
+	if x < y {
+		return x
+	} else {
+		return y
+	}
+}
+
+func Min32(x uint32, y uint32) uint32 {
 	if x < y {
 		return x
 	} else {
