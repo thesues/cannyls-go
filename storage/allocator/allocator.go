@@ -11,6 +11,7 @@ import (
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
+	"github.com/thesues/go-judy"
 )
 
 type DataPortionAlloc interface {
@@ -20,6 +21,7 @@ type DataPortionAlloc interface {
 	RestoreFromIndex(blockSize block.BlockSize, capacityInByte uint64, vec []portion.DataPortion)
 	MemoryUsed() uint64
 	FreeCount() uint64
+	GetAllocationBitStatus(n uint64, totalBlocks uint64) []float64
 }
 
 //TODO: Use ceph bitmap algorithm
@@ -117,6 +119,36 @@ func (alloc *BtreeDataPortionAlloc) Release(p portion.DataPortion) {
 	freeP := portion.FromDataPortion(p)
 	merged := alloc.mergeFreePortions(freeP)
 	alloc.addFreePortion(merged)
+}
+
+func (alloc *BtreeDataPortionAlloc) GetAllocationBitStatus(n uint64, totalBlocks uint64) []float64 {
+
+	//create a new bitmap
+	bitmap := &judy.Judy1{}
+	defer bitmap.Free()
+	alloc.endToFree.Ascend(func(a btree.Item) bool {
+		p := portion.FreePortion(a.(portion.EndBasedPortion))
+		if p.Start().AsU64() > totalBlocks {
+			return false
+		}
+		for i := p.Start().AsU64(); i < p.End().AsU64(); i++ {
+			bitmap.Set(i)
+		}
+		return true
+	})
+
+	/*
+		Turn the bitmap to float vector
+		every "n" sectors merged into one block, this block is used for render pictures
+	*/
+	bitmapVector := make([]float64, totalBlocks/n, totalBlocks/n)
+
+	var i uint64
+	for i = 0; i < totalBlocks/n; i++ {
+		freeCounts := bitmap.CountFrom(i*n, (i+1)*n-1)
+		bitmapVector[i] = float64(n-freeCounts) / float64(n)
+	}
+	return bitmapVector
 }
 
 func (alloc *BtreeDataPortionAlloc) isOverlapedPortion(p portion.DataPortion) bool {

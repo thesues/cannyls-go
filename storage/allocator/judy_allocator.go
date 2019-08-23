@@ -156,7 +156,6 @@ func (alloc *JudyPortionAlloc) allPortions() (sizeBased []JudyPortion, startBase
 
 func (alloc *JudyPortionAlloc) Display() {
 
-
 	sizeBased, startBased, readyToBeReleased := alloc.allPortions()
 
 	fmt.Printf("==Size Based Tree==\n")
@@ -244,7 +243,6 @@ func (alloc *JudyPortionAlloc) Release(p portion.DataPortion) {
 	alloc.readyToBeReleased.Set(uint64(free))
 
 }
-
 
 func (alloc *JudyPortionAlloc) isOverlapedPortion(p portion.DataPortion) bool {
 
@@ -334,6 +332,55 @@ func (alloc *JudyPortionAlloc) RestoreFromIndexWithJudy(blockSize block.BlockSiz
 
 		index, ok = judyArray.Prev(index)
 	}
+}
+
+/*
+n: n sector combines one float number
+totalBlocks: total number of blocks
+*/
+func (alloc *JudyPortionAlloc) GetAllocationBitStatus(n uint64, totalBlocks uint64) []float64 {
+
+	//create a new bitmap
+	bitmap := &judy.Judy1{}
+	defer bitmap.Free()
+
+	free, ok := alloc.startBasedTree.First(0)
+	for ok {
+		//only read the first totalBlocks
+		p := JudyPortion(free)
+		if p.Start().AsU64() > totalBlocks {
+			break
+		}
+		for i := p.Start().AsU64(); i < p.End().AsU64(); i++ {
+			bitmap.Set(i)
+		}
+		free, ok = alloc.startBasedTree.Next(free)
+	}
+
+	free, ok = alloc.readyToBeReleased.First(0)
+	for ok {
+		p := JudyPortion(free)
+		if p.Start().AsU64() > totalBlocks {
+			break
+		}
+		for i := p.Start().AsU64(); i < p.End().AsU64(); i++ {
+			bitmap.Set(i)
+		}
+		free, ok = alloc.readyToBeReleased.Next(free)
+	}
+
+	/*
+		Turn the bitmap to float vector
+		every "n" sectors merged into one block, this block is used for render pictures
+	*/
+	bitmapVector := make([]float64, totalBlocks/n, totalBlocks/n)
+
+	var i uint64
+	for i = 0; i < totalBlocks/n; i++ {
+		freeCounts := bitmap.CountFrom(i*n, (i+1)*n-1)
+		bitmapVector[i] = float64(n-freeCounts) / float64(n)
+	}
+	return bitmapVector
 }
 
 //almost the same with RestoreFromIndex of BtreeDataPortionAlloc
