@@ -30,6 +30,11 @@ func favicon(w http.ResponseWriter, r *http.Request) {
 
 //Based on https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
 
+//getalloc is not thread-safe.
+type GetAllocRequest struct {
+	resultChan chan []float64
+}
+
 //put
 type PutRequest struct {
 	ctx        context.Context
@@ -137,6 +142,11 @@ END:
 	}
 }
 
+func handleAllocRequest(store *storage.Storage, request GetAllocRequest) {
+	vec := store.GetAllocationStatus()
+	request.resultChan <- vec
+}
+
 func handlePutRequest(store *storage.Storage, request PutRequest) {
 
 	var response PutResult
@@ -208,6 +218,8 @@ func ServeStore(store *storage.Storage) {
 					handleGetRequest(store, request.(GetRequest))
 				case DeleteRequest:
 					handleRandomRequest(store, request.(DeleteRequest))
+				case GetAllocRequest:
+					handleAllocRequest(store, request.(GetAllocRequest))
 				}
 			case <-time.After(3 * time.Second):
 				store.RunSideJobOnce()
@@ -245,6 +257,15 @@ func ServeStore(store *storage.Storage) {
 		case <-ctx.Done():
 			c.String(400, "TIMEOUT")
 		}
+	})
+
+	r.GET("/getalloc/", func(c *gin.Context) {
+		//I am lazy, no timeout here
+		resultChan := make(chan []float64)
+		reqeustChan <- GetAllocRequest{resultChan: resultChan}
+
+		out := <-resultChan
+		c.JSON(200, out)
 	})
 
 	r.GET("/get/:id", func(c *gin.Context) {

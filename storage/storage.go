@@ -374,6 +374,28 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, ui
 	return true, releasedSize, nil
 }
 
+/*
+return value: len([]float) no more than 12800 points, each point is 4MB
+*/
+func (store *Storage) GetAllocationStatus() []float64 {
+	//each point represents 4M bytes
+	blockSizeBytes := store.storageHeader.BlockSize.AsU32()
+
+	n := uint64((4<<20) / blockSizeBytes)
+
+	//if blockSizeBytes is bigger than 4M, return nil
+	if n == 0 {
+		return nil
+	}
+
+	total := store.storageHeader.DataRegionSize / uint64(blockSizeBytes)
+	if total / n > 12800{
+		total = 12800 * n //max size is 50GB
+	}
+
+	return store.alloc.GetAllocationBitStatus(n, total)
+}
+
 func (store *Storage) JournalSync() {
 	store.journalRegion.Sync()
 }
