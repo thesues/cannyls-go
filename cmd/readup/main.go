@@ -11,6 +11,8 @@ import (
 	"syscall"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/gin-contrib/static"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage"
@@ -259,6 +261,7 @@ func ServeStore(store *storage.Storage) {
 		}
 	})
 
+	r.Use(static.Serve("/static", static.LocalFile("./static", false)))
 	r.GET("/getalloc/", func(c *gin.Context) {
 		//I am lazy, no timeout here
 		resultChan := make(chan []float64)
