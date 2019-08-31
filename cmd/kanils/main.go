@@ -233,7 +233,7 @@ func createCannylsForBench(c *cli.Context) (store *storage.Storage, err error) {
 	count := c.Uint64("count")
 	path := c.String("storage")
 
-	capacityBytes := block.Min().CeilAlign(size * count * 2)
+	capacityBytes := block.Min().CeilAlign(size * count * 8 / 10)
 
 	fmt.Printf("create cannyls... capacity is %s\n", bytesToString(capacityBytes))
 	store, err = storage.CreateCannylsStorage(path, capacityBytes, 0.1)
