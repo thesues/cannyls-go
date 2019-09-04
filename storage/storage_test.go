@@ -36,6 +36,35 @@ func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 	defer os.Remove("tmp11.lusf")
 }
 
+func TestStorage_GetSize(t *testing.T) {
+	storage, err := CreateCannylsStorage("tmpsize.lusf", 10<<20, 0.01)
+	assert.Nil(t, err)
+	defer storage.Close()
+	defer os.Remove("tmpsize.lusf")
+	_, err = storage.Put(lumpid("0000"), zeroedData(512*3+10))
+	assert.Nil(t, err)
+
+	sizeOnDisk, err := storage.GetSizeOnDisk(lumpid("0000"))
+	assert.Nil(t, err)
+	assert.Equal(t, sizeOnDisk, uint32(2048))
+
+	size, err := storage.GetSize(lumpid("0000"))
+	assert.Nil(t, err)
+	assert.Equal(t, size, uint32(1546))
+
+	_, err = storage.GetSizeOnDisk(lumpid("1234"))
+	assert.NotNil(t, err)
+	_, err = storage.GetSize(lumpid("1234"))
+	assert.NotNil(t, err)
+	_, err = storage.Put(lumpid("1234"), zeroedData(512*2+233))
+	assert.Nil(t, err)
+	sizeOnDisk, err = storage.GetSizeOnDisk(lumpid("1234"))
+	assert.Nil(t, err)
+	assert.Equal(t, sizeOnDisk, uint32(1536))
+	size, err = storage.GetSize(lumpid("1234"))
+	assert.Nil(t, err)
+	assert.Equal(t, size, uint32(1257))
+}
 
 func TestCreateCannylsStorageWork(t *testing.T) {
 	//10M
@@ -82,7 +111,6 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 		storage.Delete(lumpid("22"))
 	}
 	storage.PutEmbed(lumpid("22"), []byte("hello, world"))
-
 
 	storage.Close()
 
@@ -225,7 +253,7 @@ func TestStorageLoopForEver32(t *testing.T) {
 			break
 		}
 
-		if _,_, err = storage.Delete(lumpidnum(i)); err != nil {
+		if _, _, err = storage.Delete(lumpidnum(i)); err != nil {
 			fmt.Printf("%+v", err)
 			break
 

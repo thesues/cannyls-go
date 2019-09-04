@@ -12,6 +12,10 @@ import (
 //FreePortion/SizeBasedPortion/EndBasedPortion is used only in BtreeDataPortionAlloc
 type FreePortion uint64
 
+const (
+	LUMP_DATA_TRAILER_SIZE = 2
+)
+
 /*
 64bit
 24    +    40
@@ -111,6 +115,12 @@ func (p DataPortion) ShiftBlockToBytes(b block.BlockSize) (offset uint64, size u
 	return
 }
 
+func (p DataPortion) ShiftToPaddingBlock(b block.BlockSize) (offset uint64) {
+	s := uint64(b.AsU16())
+	offset = (p.Start.AsU64() + uint64(p.Len) - 1) * s
+	return offset
+}
+
 func (p DataPortion) AsInts() (offset uint64, size uint16) {
 	return p.Start.AsU64(), p.Len
 }
@@ -122,8 +132,8 @@ func NewDataPortion(start uint64, size uint16) DataPortion {
 	}
 }
 
-func (dp DataPortion) SizeOnDisk(b block.BlockSize) uint32 {
-	return uint32(dp.Len) * uint32(b.AsU16())
+func (p DataPortion) SizeOnDisk(b block.BlockSize) uint32 {
+	return uint32(p.Len) * uint32(b.AsU16())
 }
 
 type Portion interface {

@@ -14,10 +14,6 @@ import (
 	"github.com/thesues/cannyls-go/util"
 )
 
-const (
-	LUMP_DATA_TRAILER_SIZE = 2
-)
-
 type DataRegion struct {
 	allocator  allocator.DataPortionAlloc
 	nvm        nvm.NonVolatileMemory
@@ -54,12 +50,12 @@ func (region *DataRegion) shiftBlockSize(size uint32) uint32 {
 //WARNING: this PUT would CHANGE (data *lump.LumpData),
 func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 	//
-	size := data.Inner.Len() + LUMP_DATA_TRAILER_SIZE
+	size := data.Inner.Len() + portion.LUMP_DATA_TRAILER_SIZE
 
 	//Aligned
 	data.Inner.AlignResize(size)
 
-	trailer_offset := data.Inner.Len() - LUMP_DATA_TRAILER_SIZE
+	trailer_offset := data.Inner.Len() - portion.LUMP_DATA_TRAILER_SIZE
 	padding_len := data.Inner.Len() - size
 
 	if padding_len >= uint32(data.Inner.BlockSize().AsU16()) {
@@ -94,8 +90,28 @@ func (region *DataRegion) Release(portion portion.DataPortion) {
 	region.allocator.Release(portion)
 }
 
-func (region *DataRegion) Get(portion portion.DataPortion) (lump.LumpData, error) {
-	offset, len := portion.ShiftBlockToBytes(region.block_size)
+func (region *DataRegion) GetSize(dataPortion portion.DataPortion) (size uint32, err error) {
+	_, err = region.nvm.Seek(int64(dataPortion.ShiftToPaddingBlock(region.block_size)),
+		io.SeekStart)
+	if err != nil {
+		return 0, err
+	}
+	buf := make([]byte, region.block_size)
+	n, err := region.nvm.Read(buf)
+	if err != nil {
+		return 0, err
+	}
+	if n != int(region.block_size) {
+		return 0, errors.New("not enough bytes read, early EOF")
+	}
+	paddingSize := uint32(util.GetUINT16(buf[region.block_size-2:]))
+	size = uint32(dataPortion.Len)*uint32(region.block_size) -
+		paddingSize - portion.LUMP_DATA_TRAILER_SIZE
+	return size, nil
+}
+
+func (region *DataRegion) Get(dataPortion portion.DataPortion) (lump.LumpData, error) {
+	offset, len := dataPortion.ShiftBlockToBytes(region.block_size)
 
 	if _, err := region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
 		return lump.LumpData{}, err
@@ -109,17 +125,18 @@ func (region *DataRegion) Get(portion portion.DataPortion) (lump.LumpData, error
 
 	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
 
-	ab.Resize(ab.Len() - padding_size - LUMP_DATA_TRAILER_SIZE)
+	ab.Resize(ab.Len() - padding_size - portion.LUMP_DATA_TRAILER_SIZE)
 	return lump.NewLumpDataWithAb(ab), nil
 }
 
 //more friendly data portion read. only read up user required data.
 //the returned bytes could be less than length
-func (region *DataRegion) GetWithOffset(portion portion.DataPortion, startOffset uint32, length uint32) ([]byte, error) {
+func (region *DataRegion) GetWithOffset(dataPortion portion.DataPortion,
+	startOffset uint32, length uint32) ([]byte, error) {
 
-	offset, len := portion.ShiftBlockToBytes(region.block_size)
+	offset, len := dataPortion.ShiftBlockToBytes(region.block_size)
 
-	if startOffset+length > len-LUMP_DATA_TRAILER_SIZE {
+	if startOffset+length > len-portion.LUMP_DATA_TRAILER_SIZE {
 		return nil, errors.Wrap(internalerror.InvalidInput, "given length is too big")
 	}
 
@@ -144,7 +161,7 @@ func (region *DataRegion) GetWithOffset(portion portion.DataPortion, startOffset
 
 	//In this case, if length is too big(reach to the last block), prevent to read the padding data
 	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
-	realFileSize := util.Min32(ab.Len()-padding_size-LUMP_DATA_TRAILER_SIZE, prefixPadding+length)
+	realFileSize := util.Min32(ab.Len()-padding_size-portion.LUMP_DATA_TRAILER_SIZE, prefixPadding+length)
 	return ab.AsBytes()[prefixPadding:realFileSize], nil
 
 }
