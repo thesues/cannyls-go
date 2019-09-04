@@ -36,7 +36,6 @@ func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 	defer os.Remove("tmp11.lusf")
 }
 
-
 func TestCreateCannylsStorageWork(t *testing.T) {
 	//10M
 	var size uint32
@@ -82,7 +81,6 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 		storage.Delete(lumpid("22"))
 	}
 	storage.PutEmbed(lumpid("22"), []byte("hello, world"))
-
 
 	storage.Close()
 
@@ -225,12 +223,82 @@ func TestStorageLoopForEver32(t *testing.T) {
 			break
 		}
 
-		if _,_, err = storage.Delete(lumpidnum(i)); err != nil {
+		if _, _, err = storage.Delete(lumpidnum(i)); err != nil {
 			fmt.Printf("%+v", err)
 			break
 
 		}
 	}
+}
+
+func TestStorage_paddingWithZero(t *testing.T) {
+	payload := []byte("abcdefghijklmn")
+
+	result1 := paddingWithZero(payload, 3, 100)
+	assert.Equal(t, result1,
+		[]byte("\x00\x00\x00abcdefghijklmn\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"))
+
+	result2 := paddingWithZero(payload, 0, 20)
+	assert.Equal(t, result2,
+		[]byte("abcdefghijklmn\x00\x00\x00\x00\x00\x00"))
+
+	result3 := paddingWithZero(payload, 2, 0)
+	assert.Equal(t, result3,
+		[]byte("\x00\x00abcdefghijklmn"))
+}
+
+func TestStorage_Offset(t *testing.T) {
+	storage, err := CreateCannylsStorage("offset.lusf",
+		10<<20, 0.1)
+	assert.Nil(t, err)
+	defer storage.Close()
+	defer os.Remove("offset.lusf")
+
+	piece1 := dataFromBytes([]byte("hehe"))
+	err = storage.PutWithOffset(lumpidnum(1), piece1, 0, 20)
+	assert.Nil(t, err)
+	result, err := storage.Get(lumpidnum(1))
+	assert.Nil(t, err)
+	assert.Equal(t, result, []byte("hehe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"))
+	piece2 := dataFromBytes([]byte("haha"))
+	err = storage.PutWithOffset(lumpidnum(1), piece2, 4, 0)
+	assert.Nil(t, err)
+	piece3 := dataFromBytes([]byte("2233"))
+	err = storage.PutWithOffset(lumpidnum(1), piece3, 8, 0)
+	assert.Nil(t, err)
+	result, err = storage.Get(lumpidnum(1))
+	assert.Nil(t, err)
+	assert.Equal(t, result, []byte("hehehaha2233\x00\x00\x00\x00\x00\x00\x00\x00"))
+	result, err = storage.GetWithOffset(lumpidnum(1), 6, 10)
+	assert.Nil(t, err)
+	assert.Equal(t, result, []byte("ha2233\x00\x00\x00\x00"))
+	result, err = storage.GetWithOffset(lumpidnum(1), 20, 10)
+	assert.Nil(t, err)
+	assert.Equal(t, result, []byte(""))
+	result, err = storage.GetWithOffset(lumpidnum(1), 100, 10)
+	assert.NotNil(t, err)
+	err = storage.PutWithOffset(lumpidnum(1), piece3, 30, 0)
+	assert.NotNil(t, err)
+	err = storage.PutWithOffset(lumpidnum(1), piece3, 300, 0)
+	assert.NotNil(t, err)
+
+	piece4 := make([]byte, 1000)
+	for i := 0; i < 1000; i++ {
+		piece4[i] = byte(i)
+	}
+	err = storage.PutWithOffset(lumpidnum(2), dataFromBytes(piece4),
+		10, 1024)
+	assert.Nil(t, err)
+	err = storage.PutWithOffset(lumpidnum(2), piece1, 10, 0)
+	assert.Nil(t, err)
+	err = storage.PutWithOffset(lumpidnum(2), piece2, 1020, 0)
+	assert.Nil(t, err)
+	result, err = storage.GetWithOffset(lumpidnum(2), 0, 16)
+	assert.Nil(t, err)
+	assert.Equal(t, result, []byte("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00hehe\x04\x05"))
+	result, err = storage.GetWithOffset(lumpidnum(2), 1020, 4)
+	assert.Nil(t, err)
+	assert.Equal(t, result, []byte("haha"))
 }
 
 func BenchmarkStoragePutEmbeded(b *testing.B) {
@@ -279,6 +347,12 @@ func zeroedData(size int) lump.LumpData {
 		buf[i] = 0
 	}
 	return lumpData
+}
+
+func dataFromBytes(payload []byte) lump.LumpData {
+	data := lump.NewLumpDataAligned(len(payload), block.Min())
+	copy(data.AsBytes(), payload)
+	return data
 }
 
 func isPut(entry journal.JournalEntry, id lump.LumpId) bool {
