@@ -32,15 +32,15 @@ func TestAllocateJudyEvict(t *testing.T) {
 
 func TestAllocateBTree(t *testing.T) {
 	alloc := BuildBtreeDataPortionAlloc(24)
-	DoTestBTreeAllocate(t, alloc)
+	DoTestAllocate(t, alloc)
 }
 
 func TestAllocateJudy(t *testing.T) {
 	alloc := BuildJudyAlloc(24)
-	DoTestJudyAllocate(t, alloc)
+	DoTestAllocate(t, alloc)
 }
 
-func DoTestBTreeAllocate(t *testing.T, alloc DataPortionAlloc) {
+func DoTestAllocate(t *testing.T, alloc DataPortionAlloc) {
 	p, err := alloc.Allocate(10)
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(0, 10), p)
@@ -61,37 +61,6 @@ func DoTestBTreeAllocate(t *testing.T, alloc DataPortionAlloc) {
 	p, err = alloc.Allocate(5)
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(10, 5), p)
-	p, err = alloc.Allocate(2)
-	assert.Nil(t, err)
-	assert.Equal(t, fportion(15, 2), p)
-
-	p, err = alloc.Allocate(4)
-	assert.Error(t, err)
-
-}
-
-func DoTestJudyAllocate(t *testing.T, alloc DataPortionAlloc) {
-	p, err := alloc.Allocate(10)
-	assert.Nil(t, err)
-	assert.Equal(t, fportion(0, 10), p)
-
-	p, err = alloc.Allocate(10)
-	assert.Nil(t, err)
-	assert.Equal(t, fportion(10, 10), p)
-
-	p, err = alloc.Allocate(10)
-	assert.Error(t, err)
-
-	p, err = alloc.Allocate(4)
-	assert.Nil(t, err)
-	assert.Equal(t, fportion(20, 4), p)
-
-	alloc.Release(fportion(10, 10))
-
-	p, err = alloc.Allocate(5)
-	assert.Nil(t, err)
-	assert.Equal(t, fportion(10, 5), p)
-
 	p, err = alloc.Allocate(2)
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(15, 2), p)
@@ -174,6 +143,7 @@ func doTestAllocateRelease(t *testing.T, alloc DataPortionAlloc) {
 	p6, err = alloc.Allocate(65)
 	alloc.Release(p5)
 	alloc.Release(p6)
+	alloc.Display()
 }
 
 func fportion(addr uint64, size uint16) portion.DataPortion {
