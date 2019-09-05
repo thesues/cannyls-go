@@ -12,10 +12,6 @@ import (
 //FreePortion/SizeBasedPortion/EndBasedPortion is used only in BtreeDataPortionAlloc
 type FreePortion uint64
 
-const (
-	LUMP_DATA_TRAILER_SIZE = 2
-)
-
 /*
 64bit
 24    +    40
