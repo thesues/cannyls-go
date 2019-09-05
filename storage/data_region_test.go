@@ -74,6 +74,22 @@ func TestGetDataRegionWithOffset(t *testing.T) {
 
 }
 
+func TestDataRegion_GetSize(t *testing.T) {
+	var capacity_bytes uint32 = 10 * 1024
+	// Use Judy allocator as default
+	alloc := allocator.BuildJudyAlloc(capacity_bytes / uint32(512))
+	nvm, err := nvm.New(uint64(capacity_bytes))
+	assert.Nil(t, err)
+	region := NewDataRegion(alloc, nvm)
+	put_lump_data := lump.NewLumpDataAligned(3, block.Min())
+	copy(put_lump_data.AsBytes(), []byte("foo"))
+	p, err := region.Put(put_lump_data)
+	assert.Nil(t, err)
+	size, err := region.GetSize(p)
+	assert.Nil(t, err)
+	assert.Equal(t, size, uint32(3))
+}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
