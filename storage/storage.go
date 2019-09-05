@@ -329,25 +329,74 @@ func (store *Storage) GetWithOffset(lumpId lump.LumpId, startOffset uint32, leng
 
 }
 
-func (store *Storage) Put(lumpid lump.LumpId, lumpdata lump.LumpData) (updated bool, err error) {
-
-	err = nil
-	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
-		return updated, err
-	}
-
+func (store *Storage) put(lumpid lump.LumpId, lumpdata lump.LumpData) (err error) {
 	dataPortion, err := store.dataRegion.Put(lumpdata)
 	if err != nil {
 		return
 	}
 	if err = store.journalRegion.RecordPut(store.index, lumpid, dataPortion); err != nil {
-		//revert the dataPortion
+		// revert the dataPortion
 		store.dataRegion.Release(dataPortion)
 		return
 	}
 
 	store.index.InsertDataPortion(lumpid, dataPortion)
 	return
+}
+
+func (store *Storage) Put(lumpid lump.LumpId, lumpdata lump.LumpData) (updated bool, err error) {
+
+	err = nil
+	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
+		return updated, err
+	}
+	return updated, store.put(lumpid, lumpdata)
+}
+
+// padding payload with necessary zeros before and after, return:
+// [0: startOffset) + [startOffset, startOffset+len(payload)) + [startOffset+len(payload), reservation)
+// prefix zero        payload                                   suffix zero
+// total length is max(reservation, startOffset + len(payload))
+func paddingWithZero(payload []byte, startOffset, reservation uint32) []byte {
+	totalLength := reservation
+	if startOffset+uint32(len(payload)) > reservation {
+		totalLength = startOffset + uint32(len(payload))
+	}
+	padded := make([]byte, totalLength, totalLength)
+	copy(padded[startOffset:], payload)
+	return padded
+}
+
+// Put object with offset and space reservation.
+// For object creation, object size is max(reservation, startOffset + len(lumpdata));
+// for object update, `reservation` is ignored since space is already allocated,
+// and return error when write offset exceeds reserved object size.
+// Untouched space are zeroed.
+func (store *Storage) PutWithOffset(lumpid lump.LumpId, lumpdata lump.LumpData,
+	startOffset uint32, reservation uint32) (err error) {
+
+	p, err := store.index.Get(lumpid)
+	payload := lumpdata.AsBytes()
+	if err != nil {
+		// Only one error possible, which is "object could not be found",
+		// meaning this is a new object. Padding necessary zeros and call `put`
+		toWrite := paddingWithZero(payload, startOffset, reservation)
+		data := block.FromBytes(toWrite, block.Min())
+		lumpdata = lump.NewLumpDataWithAb(data)
+		return store.put(lumpid, lumpdata)
+	}
+
+	// update exist object; `reservation` is ignored in this case
+
+	switch v := p.(type) {
+	case portion.DataPortion:
+		return store.dataRegion.Update(v, startOffset, payload)
+	case portion.JournalPortion:
+		// TODO?
+		return errors.New("embed object update not supported")
+	default:
+		panic("never here")
+	}
 }
 
 func (store *Storage) PutEmbed(lumpid lump.LumpId, data []byte) (updated bool, err error) {
