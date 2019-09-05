@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/lumpindex"
 	x "github.com/thesues/cannyls-go/metrics"
@@ -423,7 +425,7 @@ func (store *Storage) PutWithOffset(lumpid lump.LumpId, lumpdata lump.LumpData,
 		return store.dataRegion.Update(v, startOffset, payload)
 	case portion.JournalPortion:
 		// TODO?
-		return errors.New("embed object update not supported")
+		return errors.Wrap(internalerror.InvalidInput, "embedt object does not support update")
 	default:
 		panic("never here")
 	}

@@ -14,6 +14,10 @@ import (
 	"github.com/thesues/cannyls-go/util"
 )
 
+const (
+	LUMP_DATA_TRAILER_SIZE = 2
+)
+
 type DataRegion struct {
 	allocator  allocator.DataPortionAlloc
 	nvm        nvm.NonVolatileMemory
@@ -50,12 +54,12 @@ func (region *DataRegion) shiftBlockSize(size uint32) uint32 {
 //WARNING: this PUT would CHANGE (data *lump.LumpData),
 func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 	//
-	size := data.Inner.Len() + portion.LUMP_DATA_TRAILER_SIZE
+	size := data.Inner.Len() + LUMP_DATA_TRAILER_SIZE
 
 	//Aligned
 	data.Inner.AlignResize(size)
 
-	trailer_offset := data.Inner.Len() - portion.LUMP_DATA_TRAILER_SIZE
+	trailer_offset := data.Inner.Len() - LUMP_DATA_TRAILER_SIZE
 	padding_len := data.Inner.Len() - size
 
 	if padding_len >= uint32(data.Inner.BlockSize().AsU16()) {
@@ -146,16 +150,13 @@ func (region *DataRegion) GetSize(dataPortion portion.DataPortion) (size uint32,
 		return 0, err
 	}
 	buf := make([]byte, region.block_size)
-	n, err := region.nvm.Read(buf)
+	_, err = io.ReadFull(region.nvm, buf)
 	if err != nil {
 		return 0, err
 	}
-	if n != int(region.block_size) {
-		return 0, errors.New("not enough bytes read, early EOF")
-	}
 	paddingSize := uint32(util.GetUINT16(buf[region.block_size-2:]))
 	size = uint32(dataPortion.Len)*uint32(region.block_size) -
-		paddingSize - portion.LUMP_DATA_TRAILER_SIZE
+		paddingSize - LUMP_DATA_TRAILER_SIZE
 	return size, nil
 }
 
@@ -174,7 +175,7 @@ func (region *DataRegion) Get(dataPortion portion.DataPortion) (lump.LumpData, e
 
 	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
 
-	ab.Resize(ab.Len() - padding_size - portion.LUMP_DATA_TRAILER_SIZE)
+	ab.Resize(ab.Len() - padding_size - LUMP_DATA_TRAILER_SIZE)
 	return lump.NewLumpDataWithAb(ab), nil
 }
 
@@ -183,8 +184,7 @@ func (region *DataRegion) Get(dataPortion portion.DataPortion) (lump.LumpData, e
 func (region *DataRegion) GetWithOffset(dataPortion portion.DataPortion,
 	startOffset uint32, length uint32) ([]byte, error) {
 
-
-	offset, onDiskSize := portion.ShiftBlockToBytes(region.block_size)
+	offset, onDiskSize := dataPortion.ShiftBlockToBytes(region.block_size)
 
 	if startOffset+length > onDiskSize-LUMP_DATA_TRAILER_SIZE {
 		return nil, errors.Wrap(internalerror.InvalidInput, "given length is too big")
