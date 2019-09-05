@@ -35,9 +35,9 @@ func (bs BlockSize) CeilAlign(position uint64) uint64 {
 	return (position + block_size - 1) / block_size * block_size
 }
 
-func (bs BlockSize) FloorAlign(postion uint64) uint64 {
+func (bs BlockSize) FloorAlign(position uint64) uint64 {
 	block_size := uint64(bs)
-	return postion / block_size * block_size
+	return position / block_size * block_size
 }
 
 func (bs BlockSize) IsAligned(position uint64) bool {

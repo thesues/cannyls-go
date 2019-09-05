@@ -86,6 +86,55 @@ func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 	return data_portion, err
 }
 
+func (region *DataRegion) readBlocks(readOffset int64, blockCount int) ([]byte, error) {
+	ab := block.NewAlignedBytes(blockCount*int(region.block_size), region.block_size)
+	ab.Align()
+	_, err := region.nvm.Seek(readOffset, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+	_, err = region.nvm.Read(ab.AsBytes())
+	if err != nil {
+		return nil, err
+	}
+	return ab.AsBytes(), nil
+}
+
+func (region *DataRegion) Update(dataPortion portion.DataPortion,
+	startOffset uint32, payload []byte) error {
+
+	offsetToDisk, onDiskSize := dataPortion.ShiftBlockToBytes(region.block_size)
+	if startOffset+uint32(len(payload)) > onDiskSize-LUMP_DATA_TRAILER_SIZE {
+		return errors.Wrap(internalerror.InvalidInput,
+			"object reserved capacity exceeded")
+	}
+	readOffset := region.block_size.FloorAlign(offsetToDisk + uint64(startOffset))
+	data, err := region.readBlocks(int64(readOffset),
+		(len(payload)+int(region.block_size)-1)/int(region.block_size))
+	if err != nil {
+		return err
+	}
+	prefixPadding := startOffset % region.block_size.AsU32()
+	copy(data[prefixPadding:], payload)
+	if startOffset+uint32(len(payload)) > onDiskSize-region.block_size.AsU32() {
+		paddingSize := onDiskSize -
+			startOffset - uint32(len(payload)) - LUMP_DATA_TRAILER_SIZE
+		originalPaddingSize := util.GetUINT16(data[len(data)-2:])
+		if paddingSize < uint32(originalPaddingSize) {
+			return errors.Wrap(internalerror.InvalidInput,
+				"object reserved capacity exceeded")
+		}
+	}
+
+	_, err = region.nvm.Seek(int64(readOffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+	// data is already aligned since it's returned from AlignedBytes
+	_, err = region.nvm.Write(data)
+	return err
+}
+
 func (region *DataRegion) Release(portion portion.DataPortion) {
 	region.allocator.Release(portion)
 }
@@ -134,34 +183,33 @@ func (region *DataRegion) Get(dataPortion portion.DataPortion) (lump.LumpData, e
 func (region *DataRegion) GetWithOffset(dataPortion portion.DataPortion,
 	startOffset uint32, length uint32) ([]byte, error) {
 
-	offset, len := dataPortion.ShiftBlockToBytes(region.block_size)
 
-	if startOffset+length > len-portion.LUMP_DATA_TRAILER_SIZE {
+	offset, onDiskSize := portion.ShiftBlockToBytes(region.block_size)
+
+	if startOffset+length > onDiskSize-LUMP_DATA_TRAILER_SIZE {
 		return nil, errors.Wrap(internalerror.InvalidInput, "given length is too big")
 	}
 
 	newReadStart := region.block_size.FloorAlign(offset + uint64(startOffset))
 	prefixPadding := startOffset % region.block_size.AsU32()
 
-	ab := block.NewAlignedBytes(int(length+prefixPadding), region.block_size)
-	ab.Align()
-
-	if _, err := region.nvm.Seek(int64(newReadStart), io.SeekStart); err != nil {
+	data, err := region.readBlocks(int64(newReadStart),
+		(int(length)+int(region.block_size)-1)/int(region.block_size))
+	if err != nil {
 		return nil, err
 	}
-
-	if _, err := region.nvm.Read(ab.AsBytes()); err != nil {
-		return nil, err
-	}
-
-	//If length is small, and the read op does't reach the last block
-	if length+prefixPadding <= len-region.block_size.AsU32() {
-		return ab.AsBytes()[prefixPadding : prefixPadding+length], nil
+	//If length is small, and the read op doesn't reach the last block
+	if startOffset+length <= onDiskSize-region.block_size.AsU32() {
+		return data[prefixPadding : prefixPadding+length], nil
 	}
 
 	//In this case, if length is too big(reach to the last block), prevent to read the padding data
-	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
-	realFileSize := util.Min32(ab.Len()-padding_size-portion.LUMP_DATA_TRAILER_SIZE, prefixPadding+length)
-	return ab.AsBytes()[prefixPadding:realFileSize], nil
 
+	padding_size := uint32(util.GetUINT16(data[len(data)-2:]))
+	realFileSize := util.Min32(uint32(len(data))-padding_size-LUMP_DATA_TRAILER_SIZE, prefixPadding+length)
+	if prefixPadding > realFileSize {
+		return nil, errors.Wrap(internalerror.InvalidInput,
+			"startOffset > object length")
+	}
+	return data[prefixPadding:realFileSize], nil
 }
