@@ -286,6 +286,36 @@ func (store *Storage) ListRange(start, end lump.LumpId) []lump.LumpId {
 	return store.index.ListRange(start, end)
 }
 
+// Note the returned size is not accurate size of object, but aligned to block size.
+// For accurate object size, use GetSize, which requires a disk IO.
+func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error) {
+	p, err := store.index.Get(lumpid)
+	if err != nil {
+		return 0, err
+	}
+	return p.SizeOnDisk(block.Min()), nil
+}
+
+// Get accurate size of object, require a disk IO
+func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
+	p, err := store.index.Get(lumpid)
+	if err != nil {
+		return 0, err
+	}
+	switch v := p.(type) {
+	case portion.DataPortion:
+		return store.dataRegion.GetSize(v)
+	case portion.JournalPortion:
+		data, err := store.journalRegion.GetEmbededData(v)
+		if err != nil {
+			return 0, err
+		}
+		return uint32(len(data)), nil
+	default:
+		panic("never here")
+	}
+}
+
 func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 	p, err := store.index.Get(lumpid)
 	if err != nil {

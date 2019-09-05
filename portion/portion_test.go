@@ -36,3 +36,9 @@ func TestDataPortion(t *testing.T) {
 	assert.Equal(t, uint64(110), p.End())
 
 }
+
+func TestDataPortion_ShiftToPaddingSize(t *testing.T) {
+	p := NewDataPortion(123, 30)
+	offset := p.ShiftToPaddingBlock(512)
+	assert.Equal(t, uint64(77824), offset)
+}
