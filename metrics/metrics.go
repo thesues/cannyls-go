@@ -27,9 +27,9 @@ var (
 
 type journalRegionMetric struct {
 	Syncs        *stats.Int64Measure `aggr:"Counter"`
-	GcQueueSize  *stats.Int64Measure `aggr:"Gauge"`
-	RecordCounts *stats.Int64Measure `aggr:"Counter"`
-	Capacity     *stats.Int64Measure `aggr:"Gauge""`
+	GcQueueSize  *stats.Int64Measure `aggr:"LastValue"`
+	RecordCounts *stats.Int64Measure `aggr:"Sum"`
+	Capacity     *stats.Int64Measure `aggr:"LastValue""`
 }
 
 func newJournalRegionMetric() *journalRegionMetric {
@@ -37,7 +37,7 @@ func newJournalRegionMetric() *journalRegionMetric {
 		Syncs:        stats.Int64("JournalSync", "how many time Journal syncs", "1"),
 		GcQueueSize:  stats.Int64("GcQueueSize", "how many records have be put in gcqueue", "1"),
 		RecordCounts: stats.Int64("Records in journal", "records put in the journal region since start", "1"),
-		Capacity:     stats.Int64("Capacity", "The size of JournalRegion, by bytes", "byte"),
+		Capacity:     stats.Int64("JournalUsage", "The usage of JournalRegion, by bytes", "byte"),
 	}
 }
 
@@ -59,8 +59,10 @@ func createAppendViews(m interface{}, list []*view.View) []*view.View {
 		switch golangTag.Get("aggr") {
 		case "Counter":
 			aggr = view.Count()
-		case "Gauge":
+		case "LastValue":
 			aggr = view.LastValue()
+		case "Sum":
+			aggr = view.Sum()
 		default:
 			panic("now we only suppport Counter and Gauge")
 		}

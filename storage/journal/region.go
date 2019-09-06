@@ -91,7 +91,6 @@ func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 	var i int64 = 0
 	for {
 		entry, err = iter.PopFront()
-		i++
 		if err != nil {
 			if err != internalerror.NoEntries {
 				panic(fmt.Sprintf("Can not restore journal :%v", err))
@@ -113,6 +112,7 @@ func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 		default:
 			panic("never be here")
 		}
+		i++
 
 	}
 
@@ -143,7 +143,7 @@ func (journal *JournalRegion) append(index *lumpindex.LumpIndex, record JournalR
 
 func (journal *JournalRegion) appendWithGC(index *lumpindex.LumpIndex, record JournalRecord) (err error) {
 	//metric
-	ostats.Record(context.Background(), x.JournalRegionMetric.RecordCounts.M(1))
+	ostats.Record(context.Background(), x.JournalRegionMetric.RecordCounts.M(+1))
 
 	if err = journal.append(index, record); err != nil {
 		return err

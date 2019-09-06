@@ -15,7 +15,9 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
+	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/storage"
+	"github.com/thesues/cannyls-go/util"
 	"github.com/urfave/cli"
 
 	"context"
@@ -191,27 +193,17 @@ func handlePutRequest(store *storage.Storage, request PutRequest) {
 func ServeStore(store *storage.Storage) {
 	fmt.Printf("start http server\n")
 
-	sc := make(chan os.Signal, 1)
-
-	signal.Notify(sc,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
-
-	go func() {
-		select {
-		case sig := <-sc:
-			// send signal again, return directly
-			fmt.Printf("\nGot signal [%v] to exit.\n", sig)
-			os.Exit(1)
-		}
-	}()
-
 	reqeustChan := make(chan interface{}, 10)
 
-	go func() {
+	//cannyls storage routine
+	cannylsStopper := util.NewStopper()
+
+	cannylsStopper.RunWorker(func() {
 		for {
 			select {
+			case <-cannylsStopper.ShouldStop():
+				store.Close()
+				return
 			case request := <-reqeustChan:
 				switch request.(type) {
 				case PutRequest:
@@ -227,7 +219,7 @@ func ServeStore(store *storage.Storage) {
 				store.RunSideJobOnce()
 			}
 		}
-	}()
+	})
 
 	r := gin.Default()
 
@@ -269,6 +261,10 @@ func ServeStore(store *storage.Storage) {
 
 		out := <-resultChan
 		c.JSON(200, out)
+	})
+
+	r.GET("/metrics", func(c *gin.Context) {
+		x.PrometheusHandler.ServeHTTP(c.Writer, c.Request)
 	})
 
 	r.GET("/get/:id", func(c *gin.Context) {
@@ -365,8 +361,49 @@ func ServeStore(store *storage.Storage) {
 
 	})
 
-	r.Run(":8081")
-	return
+	srv := &http.Server{
+		Addr:    ":8081",
+		Handler: r,
+	}
+
+	httpStopper := util.NewStopper()
+	httpStopper.RunWorker(func() {
+		// service connections
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			panic("http server crashed")
+		}
+	})
+
+	sc := make(chan os.Signal, 1)
+
+	signal.Notify(sc,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	for {
+		select {
+		case sig := <-sc:
+			// send signal again, return directly
+			if sig != syscall.SIGINT {
+				continue
+			}
+			fmt.Printf("\nGot signal [%v] to exit.\n", sig)
+
+			//stop http server
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := srv.Shutdown(ctx); err != nil {
+				panic("Server Shutdown failed")
+			}
+			httpStopper.Stop() //wait for the ListenAndServe finish.
+
+			//stop cannyls server, it will call store.Close first.
+			cannylsStopper.Stop()
+			return
+		}
+		return
+	}
 }
 
 func main() {
@@ -380,7 +417,6 @@ func main() {
 		if err != nil {
 			return
 		}
-		defer store.Close()
 		ServeStore(store)
 	}
 
