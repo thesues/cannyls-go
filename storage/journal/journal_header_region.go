@@ -1,10 +1,11 @@
 package journal
 
 import (
+	"io"
+
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/util"
-	"io"
 )
 
 func NewJournalHeadRegion(nvm nvm.NonVolatileMemory) *JournalHeaderRegion {
@@ -31,7 +32,11 @@ func (headerRegion *JournalHeaderRegion) WriteTo(head uint64) (err error) {
 		return
 	}
 
-	return headerRegion.nvm.Sync()
+	return nil
+	//if storage crashed, and the headerRegion did not SYNC to disk.
+	//the data consistence is still ensure. we could restore data from
+	//the last headerRegion.
+	//return headerRegion.nvm.Sync()
 }
 
 func (headerRegion *JournalHeaderRegion) ReadFrom() (head uint64, err error) {
