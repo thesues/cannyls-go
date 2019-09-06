@@ -1,6 +1,7 @@
 package journal
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -10,8 +11,10 @@ import (
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/lumpindex"
+	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
+	ostats "go.opencensus.io/stats"
 )
 
 const (
@@ -85,8 +88,10 @@ func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 	var entry JournalEntry
 	var err error
 	iter := journal.ring.BufferedIter()
+	var i int64 = 0
 	for {
 		entry, err = iter.PopFront()
+		i++
 		if err != nil {
 			if err != internalerror.NoEntries {
 				panic(fmt.Sprintf("Can not restore journal :%v", err))
@@ -108,7 +113,14 @@ func (journal *JournalRegion) RestoreIndex(index *lumpindex.LumpIndex) {
 		default:
 			panic("never be here")
 		}
+
 	}
+
+	//metric
+	ostats.Record(context.Background(), x.JournalRegionMetric.RecordCounts.M(i))
+	//update usage
+	journal.ring.DoStoreUsage()
+
 	//this iter has more than one goroutine to read data from nvm
 	//It must be sure all the goroutines are closed before normal operations
 	iter.Close()
@@ -130,6 +142,9 @@ func (journal *JournalRegion) append(index *lumpindex.LumpIndex, record JournalR
 }
 
 func (journal *JournalRegion) appendWithGC(index *lumpindex.LumpIndex, record JournalRecord) (err error) {
+	//metric
+	ostats.Record(context.Background(), x.JournalRegionMetric.RecordCounts.M(1))
+
 	if err = journal.append(index, record); err != nil {
 		return err
 	}
@@ -138,6 +153,10 @@ func (journal *JournalRegion) appendWithGC(index *lumpindex.LumpIndex, record Jo
 	}
 	journal.trySync()
 	return
+}
+
+func (Journal *JournalRegion) Usage() uint64 {
+	return Journal.ring.Usage()
 }
 
 func (Journal *JournalRegion) isGarbage(index *lumpindex.LumpIndex, entry JournalEntry) bool {
@@ -192,6 +211,8 @@ func (journal *JournalRegion) gcOnce(index *lumpindex.LumpIndex) {
 				journal.append(index, record)
 				goto ENDFOR
 			}
+			//metric, if record is garbage, the recordCount should decrease
+			ostats.Record(context.Background(), x.JournalRegionMetric.RecordCounts.M(-1))
 
 		} else {
 			break
@@ -199,6 +220,7 @@ func (journal *JournalRegion) gcOnce(index *lumpindex.LumpIndex) {
 	}
 
 ENDFOR:
+	ostats.Record(context.Background(), x.JournalRegionMetric.GcQueueSize.M(int64(journal.gcQueue.Len())))
 
 	/*
 		front := journal.gcQueue.Front()
@@ -247,6 +269,8 @@ func (journal *JournalRegion) fillGCQueue() {
 		journal.gcQueue.PushBack(entry)
 		i++
 	}
+	//metric
+	ostats.Record(context.Background(), x.JournalRegionMetric.GcQueueSize.M(int64(journal.gcQueue.Len())))
 }
 
 func (journal *JournalRegion) Sync() {
@@ -255,6 +279,8 @@ func (journal *JournalRegion) Sync() {
 		panic(fmt.Sprintf("journal sync failed: %v", err))
 	}
 	journal.syncCountDown = SYNC_INTERVAL
+	//metric
+	ostats.Record(context.Background(), x.JournalRegionMetric.Syncs.M(1))
 }
 
 func (journal *JournalRegion) trySync() {

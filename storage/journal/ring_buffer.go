@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/klauspost/readahead"
 	"github.com/thesues/cannyls-go/address"
@@ -20,6 +21,8 @@ type JournalRingBuffer struct {
 	unreleasedHead uint64
 	head           uint64
 	tail           uint64
+	//usage field is atomic, only used for collecting metrics
+	usage uint64
 }
 
 func (ring *JournalRingBuffer) Head() uint64 {
@@ -58,12 +61,20 @@ func (ring *JournalRingBuffer) Capacity() uint64 {
 	return ring.nvm.Capacity()
 }
 
-func (ring *JournalRingBuffer) Usage() uint64 {
+//unsafe
+func (ring *JournalRingBuffer) DoStoreUsage() {
+	var usage uint64
 	if ring.unreleasedHead <= ring.tail {
-		return ring.tail - ring.unreleasedHead
+		usage = ring.tail - ring.unreleasedHead
 	} else {
-		return ring.tail + ring.Capacity() - ring.unreleasedHead
+		usage = ring.tail + ring.Capacity() - ring.unreleasedHead
 	}
+	atomic.StoreUint64(&ring.usage, usage)
+}
+
+//go routine safe
+func (ring *JournalRingBuffer) Usage() uint64 {
+	return atomic.LoadUint64(&ring.usage)
 }
 
 func (ring *JournalRingBuffer) Sync() error {
@@ -119,6 +130,8 @@ func (ring *JournalRingBuffer) Enqueue(record JournalRecord) (jportion portion.J
 	case EmbedRecord:
 		jportion = portion.NewJournalPortion(preTail+EMBEDDED_DATA_OFFSET, uint16(len(r.Data)))
 	}
+
+	ring.DoStoreUsage()
 	return
 }
 
@@ -151,6 +164,7 @@ func (ring *JournalRingBuffer) isOverFlow(record JournalRecord) bool {
 
 func (ring *JournalRingBuffer) ReleaseBytesUntil(head uint64) {
 	ring.unreleasedHead = head
+	ring.DoStoreUsage()
 }
 
 /*No buffer and update head*/

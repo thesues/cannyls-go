@@ -2,17 +2,20 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-
 	"time"
 
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/lumpindex"
+	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/storage/allocator"
 	"github.com/thesues/cannyls-go/storage/journal"
+	"github.com/thesues/cannyls-go/util"
+	ostats "go.opencensus.io/stats"
 )
 
 var _ = fmt.Println
@@ -28,12 +31,13 @@ const (
 )
 
 type Storage struct {
-	storageHeader *nvm.StorageHeader
-	dataRegion    *DataRegion
-	journalRegion *journal.JournalRegion
-	index         *lumpindex.LumpIndex
-	innerNVM      nvm.NonVolatileMemory
-	alloc         allocator.DataPortionAlloc
+	storageHeader         *nvm.StorageHeader
+	dataRegion            *DataRegion
+	journalRegion         *journal.JournalRegion
+	index                 *lumpindex.LumpIndex
+	innerNVM              nvm.NonVolatileMemory
+	alloc                 allocator.DataPortionAlloc
+	updateCapacityStopper *util.Stopper
 }
 
 type StorageUsage struct {
@@ -60,18 +64,17 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 		return nil, err
 	}
 
-	fmt.Printf("%v Start to restore index\n", time.Now())
 	journalRegion.RestoreIndex(index)
-	fmt.Printf("%v End to restore index\n", time.Now())
-	fmt.Printf("Index's mem is %d\n", index.MemoryUsed())
-	id, _ := index.Min()
-	fmt.Printf("Min index is %d\n", id.U64())
-	id, _ = index.Max()
-	fmt.Printf("Max index is %d\n", id.U64())
+	/*
+		fmt.Printf("Index's mem is %d\n", index.MemoryUsed())
+		id, _ := index.Min()
+		fmt.Printf("Min index is %d\n", id.U64())
+		id, _ = index.Max()
+		fmt.Printf("Max index is %d\n", id.U64())
+	*/
 
 	//use JudyAlloc as default
 	alloc := allocator.NewJudyAlloc()
-	fmt.Printf("%v :Start to restore allocator\n", time.Now())
 
 	//  use RestoreFromIndex as default
 	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
@@ -82,17 +85,44 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 			memory.
 	*/
 
-	fmt.Printf("%v :End to restore allocator\n", time.Now())
 	dataRegion := NewDataRegion(alloc, dataNVM)
 
-	return &Storage{
-		storageHeader: header,
-		dataRegion:    dataRegion,
-		journalRegion: journalRegion,
-		index:         index,
-		innerNVM:      file,
-		alloc:         alloc,
-	}, nil
+	//Add a go routing to collect capacity information into metric
+
+	s := &Storage{
+		storageHeader:         header,
+		dataRegion:            dataRegion,
+		journalRegion:         journalRegion,
+		index:                 index,
+		innerNVM:              file,
+		alloc:                 alloc,
+		updateCapacityStopper: util.NewStopper(),
+	}
+
+	//RunWorker == go func()
+	s.updateCapacityStopper.RunWorker(func() {
+		updateUsageInfo(s)
+	})
+
+	return s, nil
+}
+
+//go routine to collect capacity data
+func updateUsageInfo(store *Storage) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	//on start, record the capacity first
+	ctx := context.Background()
+	ostats.Record(ctx, x.JournalRegionMetric.Capacity.M(int64(store.journalRegion.Usage())))
+	for {
+		select {
+		case <-ticker.C:
+			ctx := context.Background()
+			ostats.Record(ctx, x.JournalRegionMetric.Capacity.M(int64(store.journalRegion.Usage())))
+		case <-store.updateCapacityStopper.ShouldStop():
+			return
+		}
+	}
 
 }
 
@@ -381,7 +411,7 @@ func (store *Storage) GetAllocationStatus() []float64 {
 	//each point represents 4M bytes
 	blockSizeBytes := store.storageHeader.BlockSize.AsU32()
 
-	n := uint64((4<<20) / blockSizeBytes)
+	n := uint64((4 << 20) / blockSizeBytes)
 
 	//if blockSizeBytes is bigger than 4M, return nil
 	if n == 0 {
@@ -389,7 +419,7 @@ func (store *Storage) GetAllocationStatus() []float64 {
 	}
 
 	total := store.storageHeader.DataRegionSize / uint64(blockSizeBytes)
-	if total / n > 12800{
+	if total/n > 12800 {
 		total = 12800 * n //max size is 50GB
 	}
 
@@ -401,8 +431,10 @@ func (store *Storage) JournalSync() {
 }
 
 func (store *Storage) Close() {
+	store.updateCapacityStopper.Stop() //will wait goroutine's end
 	store.journalRegion.Sync()
 	store.innerNVM.Close()
+
 }
 
 func (store *Storage) RunSideJobOnce() {

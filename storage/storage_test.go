@@ -2,12 +2,15 @@ package storage
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
+	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/storage/journal"
 )
 
@@ -35,7 +38,6 @@ func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 	defer storage.Close()
 	defer os.Remove("tmp11.lusf")
 }
-
 
 func TestCreateCannylsStorageWork(t *testing.T) {
 	//10M
@@ -82,7 +84,6 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 		storage.Delete(lumpid("22"))
 	}
 	storage.PutEmbed(lumpid("22"), []byte("hello, world"))
-
 
 	storage.Close()
 
@@ -225,7 +226,7 @@ func TestStorageLoopForEver32(t *testing.T) {
 			break
 		}
 
-		if _,_, err = storage.Delete(lumpidnum(i)); err != nil {
+		if _, _, err = storage.Delete(lumpidnum(i)); err != nil {
 			fmt.Printf("%+v", err)
 			break
 
@@ -295,4 +296,30 @@ func isDelete(entry journal.JournalEntry, id lump.LumpId) bool {
 		return r.LumpID == id
 	}
 	return false
+}
+
+/*learn from this article:
+*https://blog.questionable.services/article/testing-http-handlers-go/
+ */
+func TestMetricHttpSever(t *testing.T) {
+	//500K
+	storage, err := CreateCannylsStorage("tmp11.lusf", 500<<10, 0.5)
+	defer os.Remove("tmp11.lusf")
+
+	dummyData := make([]byte, 1024)
+
+	for i := 0; i < 130; i++ {
+		storage.PutEmbed(lumpidnum(i), dummyData)
+	}
+
+	storage.JournalSync()
+	storage.JournalSync()
+
+	req, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	x.PrometheusHandler.ServeHTTP(rr, req)
+	fmt.Printf("%s", rr.Body.String())
 }
