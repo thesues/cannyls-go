@@ -343,6 +343,7 @@ func BenchmarkStoragePutEmbeded(b *testing.B) {
 	}
 	defer os.Remove("bench.lusf")
 	data := []byte("foo")
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		if _, err = storage.PutEmbed(lumpidnum(i), data); err != nil {
 			fmt.Printf("ERR is %+v\n", err)
@@ -354,8 +355,9 @@ func BenchmarkStoragePutEmbeded(b *testing.B) {
 func BenchmarkStoragePutData(b *testing.B) {
 	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
 	defer os.Remove("bench.lusf")
+	b.ReportAllocs()
+	d := zeroedData(42)
 	for i := 0; i < b.N; i++ {
-		d := zeroedData(42)
 		storage.Put(lumpidnum(i), d)
 		d.Inner.Resize(42)
 	}

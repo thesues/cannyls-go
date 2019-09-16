@@ -68,7 +68,8 @@ func (ab *AlignedBytes) AsBytes() []byte {
 	return ab.buf[ab.offset : uint32(ab.offset)+ab.len]
 }
 
-func (ab *AlignedBytes) Resize(newLen uint32) {
+func (ab *AlignedBytes) Resize(newLen uint32) bool {
+	var hasNewAlloc bool
 	newCapacity := ab.block.CeilAlign(uint64(newLen))
 	if int(newCapacity) > len(ab.buf)-int(ab.offset) {
 		offset, newBuf := createNewAlignedBuf(int(newCapacity), ab.block)
@@ -77,8 +78,10 @@ func (ab *AlignedBytes) Resize(newLen uint32) {
 		copy(newBuf[offset:], ab.AsBytes())
 		ab.buf = newBuf
 		ab.offset = offset
+		hasNewAlloc = true
 	}
 	ab.len = newLen
+	return hasNewAlloc
 }
 
 func (ab *AlignedBytes) AlignResize(newLen uint32) {

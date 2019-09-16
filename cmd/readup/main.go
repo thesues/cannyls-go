@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/gin-contrib/static"
-	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/storage"
@@ -24,6 +23,10 @@ import (
 	"net/http"
 	"time"
 )
+
+
+
+
 
 //https://gist.github.com/davealbert/6278ecbdf679c755f29bab5d325e2995
 func favicon(w http.ResponseWriter, r *http.Request) {
@@ -330,7 +333,12 @@ func ServeStore(store *storage.Storage) {
 			c.String(405, "size too big")
 			return
 		}
-		ab := lump.NewLumpDataAligned(int(header.Size), block.Min())
+		//ab := lump.NewLumpDataAligned(int(header.Size), block.Min())
+		//alloc ab
+		ab := lump.GetLumpData(int(header.Size))
+		//free ab
+		defer lump.PutLumpData(ab)
+		
 		_, err = io.ReadFull(readFile, ab.AsBytes())
 		if err != nil {
 			c.String(409, "read failed")
@@ -347,10 +355,8 @@ func ServeStore(store *storage.Storage) {
 		}
 
 		reqeustChan <- request
-
 		select {
 		case out := <-request.resultChan:
-			fmt.Println(out)
 			if out.err != nil {
 				c.String(400, out.err.Error())
 			} else {

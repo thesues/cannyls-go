@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
@@ -28,7 +27,7 @@ func NewIndex() *LumpIndex {
 func (index *LumpIndex) Get(id lump.LumpId) (p portion.Portion, err error) {
 	v, ok := index.tree.Get(id.U64())
 	if ok == false {
-		return nil, errors.Wrapf(internalerror.InvalidInput, "failed to get key :%s", id.String())
+		return nil, internalerror.NoEntries
 	}
 
 	p, _ = fromValueToPortion(v)

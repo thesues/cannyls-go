@@ -2,8 +2,10 @@ package lump
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
+	"sync"
 
 	"strconv"
 
@@ -89,11 +91,8 @@ const (
 )
 
 type LumpData struct {
-	Inner *block.AlignedBytes
-}
-
-type LumpEmbededData struct {
-	Inner []byte
+	Inner      *block.AlignedBytes
+	originSize uint32
 }
 
 //TODO, to be aligned at upper
@@ -105,8 +104,10 @@ func NewLumpDataAligned(size int, blockSize block.BlockSize) LumpData {
 		}
 	}
 	ab := block.NewAlignedBytes(size, blockSize)
+
 	return LumpData{
-		Inner: ab,
+		Inner:      ab,
+		originSize: 0,
 	}
 }
 
@@ -118,4 +119,64 @@ func NewLumpDataWithAb(ab *block.AlignedBytes) LumpData {
 
 func (l LumpData) AsBytes() []byte {
 	return l.Inner.AsBytes()
+}
+
+//helper functions
+var abDataSizeClass [16]uint32
+var abDataSizePools [16]sync.Pool
+
+func init() {
+	abDataSizeClass[0] = (1 << 10)
+	for i := 1; i < 16; i++ {
+		size := abDataSizeClass[i-1] * 2
+		if size > LUMP_MAX_SIZE {
+			size = LUMP_MAX_SIZE
+		}
+		abDataSizeClass[i] = size
+	}
+
+	for i := 0; i < 16; i++ {
+		size := abDataSizeClass[i]
+		abDataSizePools[i] = sync.Pool{
+			New: func() interface{} {
+				return NewLumpDataAligned(int(size), block.Min())
+			},
+		}
+	}
+
+}
+
+func GetLumpData(size int) LumpData {
+	if size > (512 << 10) {
+		return NewLumpDataAligned(size, block.Min())
+	}
+	//if size < 512K, allocate memory from sync.Pool
+
+	i := 0
+	for ; i < len(abDataSizeClass); i++ {
+		if uint32(size) <= abDataSizeClass[i] {
+			break
+		}
+	}
+	ab := abDataSizePools[i].Get().(LumpData)
+	ab.Inner.Resize(uint32(size))
+	ab.originSize = abDataSizeClass[i]
+	return ab
+}
+
+func PutLumpData(data LumpData) error {
+	if data.originSize == 0 {
+		panic("the LumpData must be malloced by GetLumpData")
+
+	}
+	for i, n := range abDataSizeClass {
+		if data.originSize == n {
+			if data.Inner.Resize(data.originSize) {
+				panic(fmt.Sprintf("returned buffer is not big enough %d\n", data.originSize))
+			}
+			abDataSizePools[i].Put(data)
+			return nil
+		}
+	}
+	panic(fmt.Sprintf("did not find a size for originSize"))
 }
