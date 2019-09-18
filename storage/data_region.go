@@ -187,7 +187,7 @@ func (region *DataRegion) GetWithOffset(dataPortion portion.DataPortion,
 	offset, onDiskSize := dataPortion.ShiftBlockToBytes(region.block_size)
 
 	if startOffset+length > onDiskSize-LUMP_DATA_TRAILER_SIZE {
-		return nil, errors.Wrap(internalerror.InvalidInput, "given length is too big")
+		length = onDiskSize-LUMP_DATA_TRAILER_SIZE - startOffset
 	}
 
 	newReadStart := region.block_size.FloorAlign(offset + uint64(startOffset))

@@ -57,6 +57,7 @@ type GetRequest struct {
 	ctx        context.Context
 	id         uint64
 	resultChan chan GetResult
+	httpRange *HttpRange
 }
 
 type GetResult struct {
@@ -93,7 +94,12 @@ func handleGetRequest(store *storage.Storage, request GetRequest) {
 	var id lump.LumpId = lump.FromU64(0, request.id)
 
 	var err error
-	response.data, err = store.Get(id)
+	if request.httpRange == nil {
+		response.data, err = store.Get(id)
+	} else {
+		response.data, err = store.GetWithOffset(id, uint32(request.httpRange.OffsetBegin),
+				 uint32(request.httpRange.GetLength()))
+	}
 	if err != nil {
 		response.err = err
 	}
@@ -274,11 +280,23 @@ func ServeStore(store *storage.Storage) {
 			return
 		}
 		ctx := context.Background()
+		
+		var httpRange *HttpRange = nil
+		if c.GetHeader("Range") != "" { 
+			httpRange, err = ParseRequestRange(c.GetHeader("Range"), lump.LUMP_MAX_SIZE)
+			if err != nil {
+				c.String(400, err.Error())
+			}
+		}
+		
 		request := GetRequest{
 			ctx:        ctx,
 			id:         uint64(id),
 			resultChan: make(chan GetResult),
+			httpRange: httpRange,
 		}
+		
+		
 
 		reqeustChan <- request
 
