@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/thesues/cannyls-go/nvm"
 	"io"
 	"os"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/thesues/cannyls-go/nvm"
 )
 
 var _ = fmt.Printf
@@ -117,7 +118,6 @@ func TestJournalNvmBufferAutoFlush1(t *testing.T) {
 	assert.Equal(t, []byte{0, 0, 0}, f.AsBytes()[:3])
 
 }
-
 
 func TestJournalNvmBufferOverwrite(t *testing.T) {
 	f := newMemNVM()

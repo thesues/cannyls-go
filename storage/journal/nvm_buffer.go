@@ -22,12 +22,11 @@ type JournalNvmBuffer struct {
 }
 
 func NewJournalNvmBuffer(nvm nvm.NonVolatileMemory) *JournalNvmBuffer {
-	bsize := nvm.BlockSize()
 	return &JournalNvmBuffer{
 		nvm:            nvm,
 		position:       0,
-		writeBuf:       block.NewAlignedBytes(0, bsize),
-		readBuf:        block.NewAlignedBytes(0, bsize),
+		writeBuf:       block.NewAlignedBytes(0, 512),
+		readBuf:        block.NewAlignedBytes(0, 512),
 		writeBufOffset: 0,
 		maybeDirty:     false,
 	}

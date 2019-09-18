@@ -36,7 +36,6 @@ func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 	defer os.Remove("tmp11.lusf")
 }
 
-
 func TestCreateCannylsStorageWork(t *testing.T) {
 	//10M
 	var size uint32
@@ -82,7 +81,6 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 		storage.Delete(lumpid("22"))
 	}
 	storage.PutEmbed(lumpid("22"), []byte("hello, world"))
-
 
 	storage.Close()
 
@@ -225,7 +223,7 @@ func TestStorageLoopForEver32(t *testing.T) {
 			break
 		}
 
-		if _,_, err = storage.Delete(lumpidnum(i)); err != nil {
+		if _, _, err = storage.Delete(lumpidnum(i)); err != nil {
 			fmt.Printf("%+v", err)
 			break
 
@@ -252,8 +250,8 @@ func BenchmarkStoragePutEmbeded(b *testing.B) {
 func BenchmarkStoragePutData(b *testing.B) {
 	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
 	defer os.Remove("bench.lusf")
+	d := zeroedData(42)
 	for i := 0; i < b.N; i++ {
-		d := zeroedData(42)
 		storage.Put(lumpidnum(i), d)
 		d.Inner.Resize(42)
 	}
