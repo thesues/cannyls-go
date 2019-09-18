@@ -24,10 +24,6 @@ import (
 	"time"
 )
 
-
-
-
-
 //https://gist.github.com/davealbert/6278ecbdf679c755f29bab5d325e2995
 func favicon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/x-icon")
@@ -242,7 +238,7 @@ func ServeStore(store *storage.Storage) {
 				c.String(400, out.err.Error())
 			} else {
 				c.Status(200)
-				c.Header("content-length", fmt.Sprintf("%d", len(out.data)));
+				c.Header("content-length", fmt.Sprintf("%d", len(out.data)))
 				c.Stream(func(w io.Writer) bool {
 					_, err := w.Write(out.data)
 					if err != nil {
@@ -292,11 +288,10 @@ func ServeStore(store *storage.Storage) {
 				c.String(400, out.err.Error())
 			} else {
 				c.Status(200)
-				c.Header("content-length", fmt.Sprintf("%d", len(out.data)));
+				c.Header("content-length", fmt.Sprintf("%d", len(out.data)))
 				c.Stream(func(w io.Writer) bool {
 					_, err := w.Write(out.data)
 					if err != nil {
-						fmt.Println(err)
 						return true
 					}
 					return false
@@ -324,21 +319,28 @@ func ServeStore(store *storage.Storage) {
 			}
 		}
 
+		/*
+		parse the http header first, and send 100-continue
+		if the uploaded file's size is LUMP_MAX_SIZE, but the
+		content length will be bigger in form.
+		so, less than 30MB will be fine.
+		*/
+		if c.Request.ContentLength > lump.LUMP_MAX_SIZE {
+			c.String(413 , "size too big")
+			return
+		}
+		
+		//parse the real data
 		readFile, header, err := c.Request.FormFile("file")
 		if err != nil {
 			c.String(400, err.Error())
 			return
 		}
-		if header.Size > int64(lump.LUMP_MAX_SIZE) {
-			c.String(405, "size too big")
-			return
-		}
 		//ab := lump.NewLumpDataAligned(int(header.Size), block.Min())
 		//alloc ab
 		ab := lump.GetLumpData(int(header.Size))
-		//free ab
 		defer lump.PutLumpData(ab)
-		
+
 		_, err = io.ReadFull(readFile, ab.AsBytes())
 		if err != nil {
 			c.String(409, "read failed")

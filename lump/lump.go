@@ -147,6 +147,7 @@ func init() {
 }
 
 func GetLumpData(size int) LumpData {
+	//limit
 	if size > (512 << 10) {
 		return NewLumpDataAligned(size, block.Min())
 	}
@@ -165,9 +166,9 @@ func GetLumpData(size int) LumpData {
 }
 
 func PutLumpData(data LumpData) error {
+	//limit
 	if data.originSize == 0 {
-		panic("the LumpData must be malloced by GetLumpData")
-
+		return nil
 	}
 	for i, n := range abDataSizeClass {
 		if data.originSize == n {

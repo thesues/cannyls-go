@@ -101,9 +101,6 @@ uploadform.addEventListener("submit", function(e){
     e.preventDefault();
     
     var formData = new FormData(uploadform);
-    var fileInput = document.getElementById('the-file');
-    var file = fileInput.files[0];
-    formData.append('file', file);
 
     var xhr = new XMLHttpRequest();
     
