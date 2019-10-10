@@ -13,6 +13,7 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
 	"github.com/thesues/go-judy"
+	"sync/atomic"
 )
 
 //the Tree here means a set
@@ -182,19 +183,20 @@ func (alloc *JudyPortionAlloc) Allocate(size uint16) (free portion.DataPortion, 
 }
 
 func (alloc *JudyPortionAlloc) FreeCount() uint64 {
-	return alloc.freeCount
+	return atomic.LoadUint64(&alloc.freeCount)
 }
 
 func (alloc *JudyPortionAlloc) deletePortion(p JudyPortion) {
 	alloc.startBasedTree.Unset(uint64(p))
 	alloc.sizeBasedTree.Unset(uint64(p.ToSizeBasedUint64()))
-	alloc.freeCount -= uint64(p.Len())
+	//freeCount - p.Len()
+	atomic.AddUint64(&alloc.freeCount, ^uint64(p.Len()-1))
 }
 
 func (alloc *JudyPortionAlloc) addPortion(p JudyPortion) {
 	alloc.startBasedTree.Set(uint64(p))
 	alloc.sizeBasedTree.Set(uint64(p.ToSizeBasedUint64()))
-	alloc.freeCount += uint64(p.Len())
+	atomic.AddUint64(&alloc.freeCount, uint64(p.Len()))
 }
 
 func (alloc *JudyPortionAlloc) Release(p portion.DataPortion) {

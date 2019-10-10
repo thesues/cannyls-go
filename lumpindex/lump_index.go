@@ -10,18 +10,21 @@ import (
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
 	judy "github.com/thesues/go-judy"
+	"sync/atomic"
 )
 
 var _ = fmt.Println
 
 type LumpIndex struct {
-	tree judy.JudyL
+	tree   judy.JudyL
+	counts uint64
 }
 
 func NewIndex() *LumpIndex {
 	tree := judy.JudyL{}
 	return &LumpIndex{
-		tree: tree,
+		tree:   tree,
+		counts: 0,
 	}
 }
 
@@ -39,27 +42,33 @@ func (index *LumpIndex) InsertDataPortion(id lump.LumpId, data portion.DataPorti
 	var n uint64 = 0
 	n = data.Start.AsU64() | uint64(data.Len)<<40 | 1<<63
 	index.tree.Insert(id.U64(), n)
+	atomic.AddUint64(&index.counts, 1)
 }
 
 func (index *LumpIndex) InsertJournalPortion(id lump.LumpId, data portion.JournalPortion) {
 	var n uint64 = 0
 	n = data.Start.AsU64() | uint64(data.Len)<<40
 	index.tree.Insert(id.U64(), n)
+	atomic.AddUint64(&index.counts, 1)
 }
 
 func (index *LumpIndex) Delete(id lump.LumpId) bool {
+	atomic.AddUint64(&index.counts, ^uint64(0))
 	return index.tree.Delete(id.U64())
 }
 
 func (index *LumpIndex) DeleteRange(start lump.LumpId, end lump.LumpId) {
 	indexNum, _, ok := index.tree.First(start.U64())
+	n := 0
 	for ok && indexNum < end.U64() {
 		if rc := index.tree.Delete(indexNum); rc == false {
 			fmt.Printf("index %d\n", indexNum)
 			panic("judy index, delete item when iterating.. should never happen")
 		}
 		indexNum, _, ok = index.tree.Next(indexNum)
+		n += 1
 	}
+	atomic.AddUint64(&index.counts, ^uint64(n-1))
 }
 
 func (index *LumpIndex) Min() (id lump.LumpId, ok bool) {
@@ -90,8 +99,9 @@ func (index *LumpIndex) FirstEmpty() (id lump.LumpId, ok bool) {
 	return
 }
 
+//thread safe
 func (index *LumpIndex) Count() uint64 {
-	return index.tree.CountAll()
+	return atomic.LoadUint64(&index.counts)
 }
 
 func (index *LumpIndex) List() []lump.LumpId {

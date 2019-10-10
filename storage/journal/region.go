@@ -155,6 +155,7 @@ func (journal *JournalRegion) appendWithGC(index *lumpindex.LumpIndex, record Jo
 	return
 }
 
+//thread safe
 func (Journal *JournalRegion) Usage() uint64 {
 	return Journal.ring.Usage()
 }

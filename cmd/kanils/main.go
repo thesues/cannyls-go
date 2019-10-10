@@ -19,7 +19,6 @@ import (
 	"github.com/urfave/cli"
 )
 
-
 func createCannyls(c *cli.Context) error {
 	path := c.String("storage")
 	capactiyBytes := c.Uint64("capacity")
@@ -44,12 +43,13 @@ func printHeader(header nvm.StorageHeader) {
 }
 
 func printUsage(usage storage.StorageUsage) {
-	fmt.Println("===cannyls usage===")
+	fmt.Printf("===cannyls usage===")
 	fmt.Printf("file counts %v\n", usage.FileCounts)
-	fmt.Printf("Min index %d \n", usage.MinIndex)
-	fmt.Printf("Max index %d \n", usage.MaxIndex)
-	fmt.Printf("Free Bytes %s \n", humanize.Bytes(usage.FreeBytes))
-	fmt.Printf("Raw Size   %s \n", humanize.Bytes(usage.CurrentFileSize))
+	fmt.Printf("data capacity %s\n", humanize.Bytes(usage.DataCapacity))
+	fmt.Printf("data Free Bytes %s \n", humanize.Bytes(usage.DataFreeBytes))
+	fmt.Printf("journal capacity %s \n", humanize.Bytes(usage.JournalCapacity))
+	fmt.Printf("journal Usage Bytes %s \n", humanize.Bytes(usage.JournalUsageBytes))
+
 }
 
 func headerCannyls(c *cli.Context) (err error) {
@@ -90,7 +90,7 @@ func deleteCannyls(c *cli.Context) (err error) {
 
 	key := c.Uint64("key")
 	id := lump.FromU64(0, key)
-	if _,_, err = store.Delete(id); err != nil {
+	if _, _, err = store.Delete(id); err != nil {
 		return err
 	}
 

@@ -43,13 +43,12 @@ type Storage struct {
 }
 
 type StorageUsage struct {
-	JournalCapacity uint64 `json:"jouranlcapacity"`
-	DataCapacity    uint64 `json:"datacapacity"`
-	FileCounts      uint64 `json:"filecounts"`
-	MinIndex        int64  `json:"minindex"`
-	MaxIndex        int64  `json:"maxindex"`
-	FreeBytes       uint64 `json:"freebytes"`
-	CurrentFileSize uint64 `json:"currentfilesize"`
+	JournalCapacity   uint64 `json:"journalcapacity"`
+	DataCapacity      uint64 `json:"datacapacity"`
+	FileCounts        uint64 `json:"filecounts"`
+	DataFreeBytes     uint64 `json:"datafreebytes"`
+	JournalUsageBytes uint64 `json:"journalusagebytes"`
+	//	CurrentFileSize uint64 `json:"currentfilesize"`
 }
 
 func OpenCannylsStorage(path string) (*Storage, error) {
@@ -121,6 +120,7 @@ func updateUsageInfo(store *Storage) {
 		case <-ticker.C:
 			ctx := context.Background()
 			ostats.Record(ctx, x.JournalRegionMetric.Capacity.M(int64(store.journalRegion.Usage())))
+			//TODO, update data region usage in the future
 		case <-store.updateCapacityStopper.ShouldStop():
 			return
 		}
@@ -210,29 +210,13 @@ func (store *Storage) List() []lump.LumpId {
 }
 
 func (store *Storage) Usage() StorageUsage {
-
-	var min, max int64
-
-	if id, have := store.index.Min(); have {
-		min = int64(id.U64())
-	} else {
-		min = -1
-	}
-
-	if id, have := store.index.Max(); have {
-		max = int64(id.U64())
-	} else {
-		max = -1
-	}
-
 	return StorageUsage{
-		JournalCapacity: store.Header().JournalRegionSize,
-		DataCapacity:    store.Header().DataRegionSize,
-		FileCounts:      store.index.Count(),
-		MinIndex:        min,
-		MaxIndex:        max,
-		FreeBytes:       store.alloc.FreeCount() * uint64(store.Header().BlockSize.AsU16()),
-		CurrentFileSize: uint64(store.innerNVM.RawSize()),
+		JournalCapacity:   store.Header().JournalRegionSize,
+		DataCapacity:      store.Header().DataRegionSize,
+		FileCounts:        store.index.Count(),
+		DataFreeBytes:     store.alloc.FreeCount() * uint64(store.Header().BlockSize.AsU16()),
+		JournalUsageBytes: store.journalRegion.Usage(),
+		//	CurrentFileSize: uint64(store.innerNVM.RawSize()),
 	}
 }
 

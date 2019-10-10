@@ -12,6 +12,7 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
 	"github.com/thesues/go-judy"
+	"sync/atomic"
 )
 
 type DataPortionAlloc interface {
@@ -32,7 +33,7 @@ type BtreeDataPortionAlloc struct {
 }
 
 func (alloc *BtreeDataPortionAlloc) FreeCount() uint64 {
-	return alloc.freeCount
+	return atomic.LoadUint64(&alloc.freeCount)
 }
 
 func NewBtreeAlloc() *BtreeDataPortionAlloc {
@@ -56,13 +57,14 @@ func (alloc *BtreeDataPortionAlloc) MemoryUsed() uint64 {
 func (alloc *BtreeDataPortionAlloc) addFreePortion(free portion.FreePortion) {
 	alloc.sizeToFree.ReplaceOrInsert(portion.SizeBasedPortion(free))
 	alloc.endToFree.ReplaceOrInsert(portion.EndBasedPortion(free))
-	alloc.freeCount += uint64(free.Len())
+	atomic.AddUint64(&alloc.freeCount, uint64(free.Len()))
 }
 
 func (alloc *BtreeDataPortionAlloc) deleteFreePortion(free portion.FreePortion) {
 	alloc.sizeToFree.Delete(portion.SizeBasedPortion(free))
 	alloc.endToFree.Delete(portion.EndBasedPortion(free))
-	alloc.freeCount -= uint64(free.Len())
+	//freeCount - p.Len()
+	atomic.AddUint64(&alloc.freeCount, ^uint64(free.Len()-1))
 }
 
 func (alloc *BtreeDataPortionAlloc) Display() {
