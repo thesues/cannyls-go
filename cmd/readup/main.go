@@ -223,6 +223,9 @@ func ServeStore(store *storage.Storage) {
 
 	r := gin.Default()
 
+	r.GET("/usage", func(c *gin.Context) {
+		c.JSON(200, store.Usage())
+	})
 	//call delete
 	r.GET("/random", func(c *gin.Context) {
 		ctx := context.Background()
@@ -239,7 +242,7 @@ func ServeStore(store *storage.Storage) {
 				c.String(400, out.err.Error())
 			} else {
 				c.Status(200)
-				c.Header("content-length", fmt.Sprintf("%d", len(out.data)));
+				c.Header("content-length", fmt.Sprintf("%d", len(out.data)))
 				c.Stream(func(w io.Writer) bool {
 					_, err := w.Write(out.data)
 					if err != nil {
@@ -289,7 +292,7 @@ func ServeStore(store *storage.Storage) {
 				c.String(400, out.err.Error())
 			} else {
 				c.Status(200)
-				c.Header("content-length", fmt.Sprintf("%d", len(out.data)));
+				c.Header("content-length", fmt.Sprintf("%d", len(out.data)))
 				c.Stream(func(w io.Writer) bool {
 					_, err := w.Write(out.data)
 					if err != nil {
