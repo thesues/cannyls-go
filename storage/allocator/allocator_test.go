@@ -45,9 +45,13 @@ func DoTestAllocate(t *testing.T, alloc DataPortionAlloc) {
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(0, 10), p)
 
+	//24 - 10 = 14
+	assert.Equal(t, uint64(14), alloc.MaxSegmentSize())
+
 	p, err = alloc.Allocate(10)
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(10, 10), p)
+	assert.Equal(t, uint64(4), alloc.MaxSegmentSize())
 
 	p, err = alloc.Allocate(10)
 	assert.Error(t, err)
@@ -55,6 +59,7 @@ func DoTestAllocate(t *testing.T, alloc DataPortionAlloc) {
 	p, err = alloc.Allocate(4)
 	assert.Nil(t, err)
 	assert.Equal(t, fportion(20, 4), p)
+	assert.Equal(t, uint64(0), alloc.MaxSegmentSize())
 
 	alloc.Release(fportion(10, 10))
 

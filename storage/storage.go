@@ -48,6 +48,7 @@ type StorageUsage struct {
 	FileCounts        uint64 `json:"filecounts"`
 	DataFreeBytes     uint64 `json:"datafreebytes"`
 	JournalUsageBytes uint64 `json:"journalusagebytes"`
+	MaxSegmentSize    uint64 `json:"maxsegmentsize"`
 	//	CurrentFileSize uint64 `json:"currentfilesize"`
 }
 
@@ -210,12 +211,14 @@ func (store *Storage) List() []lump.LumpId {
 }
 
 func (store *Storage) Usage() StorageUsage {
+	blockSize := uint64(store.Header().BlockSize.AsU16())
 	return StorageUsage{
 		JournalCapacity:   store.Header().JournalRegionSize,
 		DataCapacity:      store.Header().DataRegionSize,
 		FileCounts:        store.index.Count(),
-		DataFreeBytes:     store.alloc.FreeCount() * uint64(store.Header().BlockSize.AsU16()),
+		DataFreeBytes:     store.alloc.FreeCount() * blockSize,
 		JournalUsageBytes: store.journalRegion.Usage(),
+		MaxSegmentSize:    util.Min(lump.LUMP_MAX_SIZE, store.alloc.MaxSegmentSize() * blockSize - 2), 
 		//	CurrentFileSize: uint64(store.innerNVM.RawSize()),
 	}
 }

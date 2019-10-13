@@ -6,6 +6,8 @@ import (
 
 	"math"
 
+	"sync/atomic"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/block"
@@ -13,14 +15,15 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
 	"github.com/thesues/go-judy"
-	"sync/atomic"
 )
 
 //the Tree here means a set
 type JudyPortionAlloc struct {
 	startBasedTree judy.Judy1
 	sizeBasedTree  judy.Judy1
-	freeCount      uint64
+	freeCount      uint64 //atomic
+	maxSegmentSize uint64 //atomic
+
 }
 
 type JudyPortion uint64
@@ -109,6 +112,7 @@ func NewJudyAlloc() *JudyPortionAlloc {
 		startBasedTree: judy.Judy1{},
 		sizeBasedTree:  judy.Judy1{},
 		freeCount:      0,
+		maxSegmentSize: 0,
 	}
 	return alloc
 }
@@ -174,6 +178,7 @@ func (alloc *JudyPortionAlloc) Allocate(size uint16) (free portion.DataPortion, 
 			if p.Len() > 0 {
 				alloc.addPortion(p)
 			}
+			alloc.updateMaxSegmentSize()
 			return free, nil
 		}
 	}
@@ -184,6 +189,16 @@ func (alloc *JudyPortionAlloc) Allocate(size uint16) (free portion.DataPortion, 
 
 func (alloc *JudyPortionAlloc) FreeCount() uint64 {
 	return atomic.LoadUint64(&alloc.freeCount)
+}
+
+func (alloc *JudyPortionAlloc) updateMaxSegmentSize() {
+	//store maxSegmentSize
+	n, ok := alloc.sizeBasedTree.Last(math.MaxUint64)
+	if ok == false {
+		atomic.StoreUint64(&alloc.maxSegmentSize, uint64(0))
+	}
+	size := fromSizebasedToJudy(n).Len()
+	atomic.StoreUint64(&alloc.maxSegmentSize, uint64(size))
 }
 
 func (alloc *JudyPortionAlloc) deletePortion(p JudyPortion) {
@@ -207,6 +222,7 @@ func (alloc *JudyPortionAlloc) Release(p portion.DataPortion) {
 	free := fromDataPortionToJudy(p)
 	merged := alloc.mergeFreePortions(free)
 	alloc.addPortion(merged)
+	alloc.updateMaxSegmentSize()
 }
 
 func (alloc *JudyPortionAlloc) isOverlapedPortion(p portion.DataPortion) bool {
@@ -286,6 +302,8 @@ func (alloc *JudyPortionAlloc) RestoreFromIndexWithJudy(blockSize block.BlockSiz
 
 		index, ok = judyArray.Prev(index)
 	}
+
+	alloc.updateMaxSegmentSize()
 }
 
 /*
@@ -350,5 +368,9 @@ func (alloc *JudyPortionAlloc) RestoreFromIndex(blockSize block.BlockSize,
 		}
 		tail = p.Start.AsU64()
 	}
+	alloc.updateMaxSegmentSize()
+}
 
+func (alloc *JudyPortionAlloc) MaxSegmentSize() uint64 {
+	return atomic.LoadUint64(&alloc.maxSegmentSize)
 }

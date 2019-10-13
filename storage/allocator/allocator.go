@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 
+	"sync/atomic"
+
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
@@ -12,7 +14,6 @@ import (
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/util"
 	"github.com/thesues/go-judy"
-	"sync/atomic"
 )
 
 type DataPortionAlloc interface {
@@ -23,13 +24,15 @@ type DataPortionAlloc interface {
 	MemoryUsed() uint64
 	FreeCount() uint64
 	GetAllocationBitStatus(n uint64, totalBlocks uint64) []float64
+	MaxSegmentSize() uint64
 }
 
 //TODO: Use ceph bitmap algorithm
 type BtreeDataPortionAlloc struct {
-	sizeToFree *btree.BTree
-	endToFree  *btree.BTree
-	freeCount  uint64
+	sizeToFree     *btree.BTree
+	endToFree      *btree.BTree
+	freeCount      uint64
+	maxSegmentSize uint64
 }
 
 func (alloc *BtreeDataPortionAlloc) FreeCount() uint64 {
@@ -39,8 +42,10 @@ func (alloc *BtreeDataPortionAlloc) FreeCount() uint64 {
 func NewBtreeAlloc() *BtreeDataPortionAlloc {
 	freeList := btree.NewFreeList(32)
 	return &BtreeDataPortionAlloc{
-		sizeToFree: btree.NewWithFreeList(32, freeList),
-		endToFree:  btree.NewWithFreeList(32, freeList),
+		sizeToFree:     btree.NewWithFreeList(32, freeList),
+		endToFree:      btree.NewWithFreeList(32, freeList),
+		freeCount:      0,
+		maxSegmentSize: 0,
 	}
 }
 
@@ -52,6 +57,16 @@ func BuildBtreeDataPortionAlloc(capacitySector uint32) *BtreeDataPortionAlloc {
 
 func (alloc *BtreeDataPortionAlloc) MemoryUsed() uint64 {
 	return 0
+}
+
+func (alloc *BtreeDataPortionAlloc) updateMaxSegmentSize() {
+	item := alloc.sizeToFree.Max()
+	if item == nil {
+		atomic.StoreUint64(&alloc.maxSegmentSize, uint64(0))
+		return
+	}
+	p := portion.FreePortion(item.(portion.SizeBasedPortion))
+	atomic.StoreUint64(&alloc.maxSegmentSize, uint64(p.Len()))
 }
 
 func (alloc *BtreeDataPortionAlloc) addFreePortion(free portion.FreePortion) {
@@ -106,6 +121,7 @@ func (alloc *BtreeDataPortionAlloc) Allocate(size uint16) (free portion.DataPort
 	})
 
 	if isAllocated {
+		alloc.updateMaxSegmentSize()
 		return free, nil
 	} else {
 		return portion.DataPortion{},
@@ -121,6 +137,8 @@ func (alloc *BtreeDataPortionAlloc) Release(p portion.DataPortion) {
 	freeP := portion.FromDataPortion(p)
 	merged := alloc.mergeFreePortions(freeP)
 	alloc.addFreePortion(merged)
+	alloc.updateMaxSegmentSize()
+
 }
 
 func (alloc *BtreeDataPortionAlloc) GetAllocationBitStatus(n uint64, totalBlocks uint64) []float64 {
@@ -239,5 +257,10 @@ func (alloc *BtreeDataPortionAlloc) RestoreFromIndex(blockSize block.BlockSize,
 		}
 		tail = p.Start.AsU64()
 	}
+	
+	alloc.updateMaxSegmentSize()
+}
 
+func (alloc *BtreeDataPortionAlloc) MaxSegmentSize() uint64 {
+	return atomic.LoadUint64(&alloc.maxSegmentSize)
 }
