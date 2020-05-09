@@ -203,6 +203,17 @@ func TestFileNVMEXLock(t *testing.T) {
 	nvm.Close()
 
 }
+func TestFileReadHole(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio", 33<<20)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio")
+	nvm.Seek(32<<20, io.SeekStart)
+	buf := alignedWithSize(512)
+	n, err := nvm.Read(buf)
+	assert.Equal(t, n, 512)
+	assert.Nil(t, err)
+
+}
 
 //helper function
 func align(bytes []byte) []byte {

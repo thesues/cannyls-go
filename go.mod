@@ -19,6 +19,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.4.0
 	github.com/thesues/go-judy v0.1.0
+	github.com/twinj/uuid v1.0.0
 	github.com/urfave/cli v1.20.0
 	go.opencensus.io v0.22.1
 	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297 // indirect

@@ -29,6 +29,25 @@ func GetUINT64(buf []byte) (n uint64) {
 }
 
 //binary helper functions
+
+func PutUINT32(buf []byte, n uint32) {
+	if len(buf) != 4 {
+		panic("int PutUINT32")
+	}
+	buf[0] = byte(n>>24) & 0xff
+	buf[1] = byte(n>>16) & 0xff
+	buf[2] = byte(n>>8) & 0xff
+	buf[3] = byte(n) & 0xff
+}
+
+func GetUINT32(buf []byte) (n uint32) {
+	n |= uint32(buf[0]) << 24
+	n |= uint32(buf[1]) << 16
+	n |= uint32(buf[2]) << 8
+	n |= uint32(buf[3])
+	return
+}
+
 func PutUINT16(buf []byte, n uint16) {
 	if len(buf) != 2 {
 		panic("in putUint16BigEndian")
@@ -91,6 +110,13 @@ func GetUINT40(buf []byte) uint64 {
 	val |= uint64(buf[4])
 	return val
 
+}
+
+func Max(x uint64, y uint64) uint64 {
+	if x < y {
+		return y
+	}
+	return x
 }
 
 func Min(x uint64, y uint64) uint64 {

@@ -14,8 +14,8 @@ import (
 type FileNVM struct {
 	file            *os.File
 	cursor_position uint64
-	view_start      uint64
-	view_end        uint64
+	viewStart       uint64
+	viewEnd         uint64
 	splited         bool //splited file is not allowd to call file.Close()
 }
 
@@ -71,7 +71,7 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		return nil, err
 	}
 
-	if err = fallocate(f,int64(capacity)) ; err != nil {
+	if err = fallocate(f, int64(capacity)); err != nil {
 		f.Close()
 		os.Remove(path)
 		return nil, err
@@ -80,8 +80,8 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	return &FileNVM{
 		file:            f,
 		cursor_position: 0,
-		view_start:      0,
-		view_end:        capacity,
+		viewStart:       0,
+		viewEnd:         capacity,
 		splited:         false,
 	}, nil
 
@@ -115,8 +115,8 @@ func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 	nvm = &FileNVM{
 		file:            f,
 		cursor_position: 0,
-		view_start:      0,
-		view_end:        capacity,
+		viewStart:       0,
+		viewEnd:         capacity,
 		splited:         false,
 	}
 	return
@@ -127,11 +127,17 @@ func (self *FileNVM) Sync() error {
 }
 
 func (self *FileNVM) Position() uint64 {
-	return self.cursor_position - self.view_start
+	return self.cursor_position - self.viewStart
+}
+func (self *FileNVM) ViewStart() uint64 {
+	return self.viewStart
+}
+func (self *FileNVM) ViewEnd() uint64 {
+	return self.viewEnd
 }
 
 func (nvm *FileNVM) Capacity() uint64 {
-	return nvm.view_end - nvm.view_start
+	return nvm.viewEnd - nvm.viewStart
 }
 
 func (nvm *FileNVM) RawSize() int64 {
@@ -147,17 +153,17 @@ func (nvm *FileNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolati
 	//TODO
 	leftNVM := &FileNVM{
 		file:            nvm.file,
-		view_start:      nvm.view_start,
-		cursor_position: nvm.view_start,
-		view_end:        nvm.view_start + position,
+		viewStart:       nvm.viewStart,
+		cursor_position: nvm.viewStart,
+		viewEnd:         nvm.viewStart + position,
 		splited:         true,
 	}
 
 	rightNVM := &FileNVM{
 		file:            nvm.file,
-		view_start:      leftNVM.view_end,
-		view_end:        nvm.view_end,
-		cursor_position: leftNVM.view_end,
+		viewStart:       leftNVM.viewEnd,
+		viewEnd:         nvm.viewEnd,
+		cursor_position: leftNVM.viewEnd,
 		splited:         true,
 	}
 
@@ -179,7 +185,7 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "seek abs is wrong %d in seek", abs)
 	}
 
-	realFilePosition := nvm.view_start + uint64(abs)
+	realFilePosition := nvm.viewStart + uint64(abs)
 
 	nvm.cursor_position = realFilePosition
 	return offset, nil
