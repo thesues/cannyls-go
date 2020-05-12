@@ -4,6 +4,7 @@ import (
 	_ "bytes"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
@@ -17,6 +18,7 @@ type FileNVM struct {
 	viewStart       uint64
 	viewEnd         uint64
 	splited         bool //splited file is not allowd to call file.Close()
+	path            string
 }
 
 func fileExists(path string) bool {
@@ -33,6 +35,10 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		return nil, internalerror.InvalidInput
 	}
 
+	if !strings.HasSuffix(path, "lusf") {
+		return nil, internalerror.InvalidInput
+	}
+
 	if fileExists(path) {
 		return nil, os.ErrExist
 	}
@@ -41,7 +47,7 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	var err error
 	flags = os.O_CREATE | os.O_RDWR
 
-	if f, err = openFileWithDirectIO(path, flags, 0644); err != nil {
+	if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 	/*
@@ -83,12 +89,17 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 		viewStart:       0,
 		viewEnd:         capacity,
 		splited:         false,
+		path:            path,
 	}, nil
 
 }
 
 func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 	var f, parsedFile *os.File
+
+	if !strings.HasSuffix(path, "lusf") {
+		return nil, nil, internalerror.InvalidInput
+	}
 
 	if parsedFile, err = os.OpenFile(path, os.O_RDWR, 07555); err != nil {
 		return nil, nil, err
@@ -118,6 +129,7 @@ func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 		viewStart:       0,
 		viewEnd:         capacity,
 		splited:         false,
+		path:            path,
 	}
 	return
 }
@@ -203,10 +215,15 @@ func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	newPosition := nvm.cursor_position + len
 
 	n, err = nvm.file.ReadAt(buf[:len], int64(nvm.cursor_position))
-	if err == io.EOF {
+	//fmt.Printf("READ::n, err is %d, %v\n", n, err)
+	//sometime, ReadAt returns '0, nil', we have to resolve this.
+	if n == 0 || err == io.EOF {
 		//expand the file
 		nvm.file.Seek(int64(newPosition), io.SeekStart)
 		nvm.cursor_position = newPosition
+		if nvm.cursor_position >= nvm.Capacity() {
+			return int(len), io.EOF
+		}
 		return int(len), nil
 	}
 	if err != nil {

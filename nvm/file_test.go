@@ -75,9 +75,9 @@ func TestFileNVMReopen(t *testing.T) {
 
 func TestFileNVMSimpleCreate(t *testing.T) {
 
-	nvm, err := CreateIfAbsent("foo", 10*1024)
+	nvm, err := CreateIfAbsent("foo.lusf", 10*1024)
 	assert.Nil(t, err)
-	defer os.Remove("foo")
+	defer os.Remove("foo.lusf")
 
 	buf := new(bytes.Buffer)
 	DefaultStorageHeader().WriteTo(buf)
@@ -88,10 +88,10 @@ func TestFileNVMSimpleCreate(t *testing.T) {
 	nvm.Close()
 
 	//check foo is created
-	_, err = os.Stat("foo")
+	_, err = os.Stat("foo.lusf")
 	assert.Nil(t, err)
 
-	nvm, _, err = Open("foo")
+	nvm, _, err = Open("foo.lusf")
 
 	assert.Nil(t, err)
 
@@ -102,9 +102,9 @@ func TestFileNVMSimpleCreate(t *testing.T) {
 }
 
 func TestFileNVMWrite(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo", 1024)
+	nvm, err := CreateIfAbsent("foo.lusf", 1024)
 	assert.Nil(t, err)
-	os.Remove("foo")
+	os.Remove("foo.lusf")
 
 	n, err := nvm.Write(alignedWithSize(2048))
 	fmt.Println(n)
@@ -113,9 +113,9 @@ func TestFileNVMWrite(t *testing.T) {
 }
 
 func TestFileNVMOperations(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo", 1024)
+	nvm, err := CreateIfAbsent("foo.lusf", 1024)
 	assert.Nil(t, err)
-	defer os.Remove("foo")
+	defer os.Remove("foo.lusf")
 
 	assert.Equal(t, uint64(1024), nvm.Capacity())
 	assert.Equal(t, uint64(0), nvm.Position())
@@ -162,17 +162,20 @@ func TestFileNVMOperations(t *testing.T) {
 }
 
 func TestFileNVMDirectIO(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio", 1024)
-	defer os.Remove("foo-dio")
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 1024)
+	defer os.Remove("foo-dio.lusf")
 
 	data := new(bytes.Buffer)
 	err = DefaultStorageHeader().WriteTo(data)
 	assert.Nil(t, err)
 	nvm.Write(align(data.Bytes()))
+	assert.Nil(t, err)
+
 	nvm.Sync()
 	nvm.Close()
 	//
-	nvm, _, err = Open("foo-dio")
+	nvm, _, err = Open("foo-dio.lusf")
+	defer os.Remove("foo-dio.lusf")
 	assert.Nil(t, err)
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
 	assert.Nil(t, err)
@@ -181,9 +184,9 @@ func TestFileNVMDirectIO(t *testing.T) {
 }
 
 func TestFileNVMEXLock(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio", 1024)
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 1024)
 	assert.Nil(t, err)
-	defer os.Remove("foo-dio")
+	defer os.Remove("foo-dio.lusf")
 
 	data := new(bytes.Buffer)
 	err = DefaultStorageHeader().WriteTo(data)
@@ -193,26 +196,39 @@ func TestFileNVMEXLock(t *testing.T) {
 	nvm.Sync()
 	nvm.Close()
 
-	nvm, _, err = Open("foo-dio")
+	nvm, _, err = Open("foo-dio.lusf")
 	assert.Nil(t, err)
 
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
 	assert.Nil(t, err)
-	assert.Equal(t, true, isExclusiveLock("foo-dio", flag))
+	assert.Equal(t, true, isExclusiveLock("foo-dio.lusf", flag))
 
 	nvm.Close()
 
 }
-func TestFileReadHole(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio", 33<<20)
-	assert.Nil(t, err)
-	defer os.Remove("foo-dio")
-	nvm.Seek(32<<20, io.SeekStart)
-	buf := alignedWithSize(512)
-	n, err := nvm.Read(buf)
-	assert.Equal(t, n, 512)
-	assert.Nil(t, err)
 
+func TestFileReadHole1(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio.lusf")
+	nvm.Seek(32<<20, io.SeekStart)
+	buf := alignedWithSize(32 << 20)
+	//n, err := nvm.Read(buf)
+	n, err := io.ReadFull(nvm, buf)
+	assert.Equal(t, io.ErrUnexpectedEOF, err)
+	assert.Equal(t, 1048576, n)
+}
+
+func TestFileReadHole2(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio.lusf")
+	nvm.Seek(0, io.SeekStart)
+	buf := alignedWithSize(32 << 20)
+	//n, err := nvm.Read(buf)
+	n, err := io.ReadFull(nvm, buf)
+	assert.Nil(t, err)
+	assert.Equal(t, 32<<20, n)
 }
 
 //helper function
