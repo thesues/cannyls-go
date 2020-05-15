@@ -319,13 +319,12 @@ func (bf *BackingFile) GetFileName() string {
 //offset is the start of backing file
 func (bf *BackingFile) ReadFromOffset(buf []byte, offset uint32) (int, error) {
 	if uint64(len(buf)) != bf.regionSize {
-		//panic("buf is small, i quit")
-		panic(fmt.Sprintf("buf is small, i quit, regsionSize is %d, len of buf is %d\n", bf.regionSize, len(buf)))
+		return 0, errors.Errorf("buf is small, i quit, regsionSize is %d, len of buf is %d\n", bf.regionSize, len(buf))
 	}
 
 	var start uint64 = bf.dataStart + uint64(offset)*bf.regionSize
 	if _, err := bf.file.Seek(int64(start), io.SeekStart); err != nil {
-		panic(fmt.Sprintf("Seek panic pos: %d, %+v", start, err))
+		return 0, errors.Errorf("Seek panic pos: %d, %+v", start, err)
 	}
 	return io.ReadFull(bf.file, buf)
 }
@@ -512,8 +511,9 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		fmt.Printf("onBacking is %+v, onOrigin is %+v, offset is %d, start is %d\n", onBacking, onOrigin, self.offset, start)
 		if len(onBacking) == 1 {
 			n, err = self.snap.myBackfile.ReadFromOffset(self.buf.AsBytes(), onBacking[0])
-			if n < 0 {
-				panic("size is not good")
+			//if returns io.UN
+			if err != nil && err != io.EOF {
+				return -1, err
 			}
 			if n == 0 {
 				return 0, io.EOF
@@ -522,11 +522,9 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 			if _, err = self.snap.originFile.Seek(int64(uint64(onOrigin[0])*regionSize), io.SeekStart); err != nil {
 				panic("failed to seek")
 			}
-			//fmt.Printf("read full from %d, len: %d\n", uint64(onOrigin[0])*regionSize, len(self.buf.AsBytes()))
 			n, err = io.ReadFull(self.snap.originFile, self.buf.AsBytes())
-			//n, err = self.snap.originFile.Read(self.buf.AsBytes())
-			if n < 0 {
-				panic("size is not good")
+			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+				return -1, err
 			}
 			if n == 0 {
 				return 0, io.EOF

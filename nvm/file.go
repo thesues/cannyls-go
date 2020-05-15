@@ -205,6 +205,10 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 
 func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
+
+	if maxLen == 0 {
+		return 0, io.EOF
+	}
 	bufLen := uint64(len(buf))
 	if !block.Min().IsAligned(uint64(bufLen)) {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
@@ -215,23 +219,12 @@ func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	newPosition := nvm.cursor_position + len
 
 	n, err = nvm.file.ReadAt(buf[:len], int64(nvm.cursor_position))
-	//fmt.Printf("READ::n, err is %d, %v\n", n, err)
-	//sometime, ReadAt returns '0, nil', we have to resolve this.
-	if n == 0 || err == io.EOF {
-		//expand the file
-		nvm.file.Seek(int64(newPosition), io.SeekStart)
-		nvm.cursor_position = newPosition
-		if nvm.cursor_position >= nvm.Capacity() {
-			return int(len), io.EOF
-		}
-		return int(len), nil
+
+	if err != nil && err != io.EOF {
+		return 0, err
 	}
-	if err != nil {
-		return -1, errors.Wrap(err, "FileNVM failed to read")
-	}
+
 	if n < int(len) {
-		//if uint64(n) < len {
-		//expand the file
 		nvm.file.Seek(int64(newPosition), io.SeekStart)
 		nvm.cursor_position = newPosition
 		return int(len), nil
