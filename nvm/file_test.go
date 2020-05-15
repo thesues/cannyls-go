@@ -250,3 +250,9 @@ func arrayWithValueSize(size int, value byte) []byte {
 	}
 	return arr
 }
+
+func fillBuf(buf []byte, x byte) {
+	for i := 0; i < len(buf); i++ {
+		buf[i] = x
+	}
+}

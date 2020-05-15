@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -255,6 +256,75 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 
 }
 
-func TestSnapfileSplit(t *testing.T) {
+func TestSnapfileBackup(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	assert.Nil(t, err)
+	defer os.Remove("foo-test.lusf")
 
+	snapFile, err := NewSnapshotNVM(nvm)
+	assert.Nil(t, err)
+
+	buf := alignedWithSize(4 << 10)
+
+	for i := 0; i < 11; i++ {
+		fillBuf(buf, byte('a')+byte(i))
+		_, err := snapFile.Seek(int64(i*(32<<20)), io.SeekStart)
+		assert.Nil(t, err)
+		n, err := snapFile.Write(buf)
+		assert.Equal(t, (4 << 10), n)
+		assert.Nil(t, err)
+	}
+
+	backupReader, err := snapFile.CreateSnapshotIfNeeded()
+	assert.Nil(t, err)
+	defer os.Remove(snapFile.myBackfile.GetFileName())
+
+	for i := 10; i >= 0; i -= 2 {
+		fillBuf(buf, byte('a')+byte(i))
+		_, err := snapFile.Seek(int64(i*(32<<20)), io.SeekStart)
+		assert.Nil(t, err)
+		_, err = snapFile.Write(buf)
+		assert.Nil(t, err)
+	}
+	/*
+		originFile: "abcdefghijk"
+		newfile     "kbidgfehcja"
+	*/
+
+	rbuf := alignedWithSize(4 << 10)
+	//read from current file
+	snapFile.Seek((32 << 20), io.SeekStart)
+	n, err := snapFile.Read(rbuf)
+	assert.Equal(t, 4096, n)
+	assert.Equal(t, byte('b'), rbuf[0])
+
+	//snap read from backing file
+	backupReader.Seek((32<<20)*10+10, io.SeekStart)
+	n, err = backupReader.Read(rbuf[:])
+	assert.Nil(t, err)
+	assert.Equal(t, 4086, n)
+	n, err = backupReader.Read(rbuf[:])
+	assert.Equal(t, io.EOF, err)
+	assert.Equal(t, byte('k'), rbuf[0])
+
+	backupReader.Seek(0, io.SeekStart)
+	n, err = backupReader.Read(rbuf[:4])
+	assert.Nil(t, err)
+	assert.Equal(t, 4, n)
+	assert.Equal(t, byte('a'), rbuf[0])
+
+	//snap read from origin file
+	backupReader.Seek((32<<20)*9, io.SeekStart)
+	n, err = backupReader.Read(rbuf[:])
+	assert.Equal(t, 4096, n)
+	assert.Nil(t, err)
+	assert.Equal(t, byte('j'), rbuf[0])
+
+	backfile, err := os.OpenFile("backup.file", os.O_CREATE|os.O_RDWR, 0644)
+	assert.Nil(t, err)
+	defer os.Remove("backup.file")
+	backupReader.Seek(0, io.SeekStart)
+	io.Copy(backfile, backupReader)
+	err = exec.Command("diff", "backup.file", "foo-test.lusf").Run()
+	assert.Nil(t, err)
 }

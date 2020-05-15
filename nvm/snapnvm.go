@@ -380,7 +380,7 @@ func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, erro
 		UUID:         uuidFile,
 		RegionShift:  25, // 1<< 20, 32MB as default
 		MaxCapacity:  originFileSize,
-		JournalSize:  fromMaxCapacityToJournalSize(originFileSize, 20),
+		JournalSize:  fromMaxCapacityToJournalSize(originFileSize, 25),
 	}
 
 	if err = header.WriteTo(file); err != nil {
@@ -389,6 +389,7 @@ func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, erro
 
 	file.Sync()
 
+	fmt.Printf("createing Backingfile journalSize is %d, dataStart At %d\n", header.JournalSize, 512+header.JournalSize)
 	return &BackingFile{
 		file:           file,
 		JournalStart:   512,
@@ -489,10 +490,17 @@ func (self *SnapshotReader) Seek(offset int64, whence int) (int64, error) {
 	default:
 		return 0, errors.New("failed to seek")
 	}
-
+	if self.offset > self.snap.rawFile.Capacity() {
+		return 0, errors.Errorf("offset is bigger than Capacity")
+	}
+	return int64(self.offset), nil
 }
+
 func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 
+	if self.offset == self.snap.rawFile.Capacity() {
+		return 0, io.EOF
+	}
 	if self.snap.originFile != self.snap.rawFile {
 		panic("for reader, rawFile == originFile")
 	}
@@ -502,42 +510,55 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		panic("Read data too big")
 	}
 	start := self.offset / regionSize * regionSize
+	maxLen := self.snap.rawFile.Capacity() - start
 	//read the whole region size
-	//in this implement, self.waterHighMark will always be (32<<20)
 	if self.waterHighMark == self.waterLowMark {
-		//readSize := (self.offset+regionSize)/regionSize*regionSize - self.offset
-		//onBacking, onOrigin := self.snap.myBackfile.GetCopyOffset(self.offset, self.offset+readSize)
 		onBacking, onOrigin := self.snap.myBackfile.GetCopyOffset(start, start+regionSize)
-		fmt.Printf("onBacking is %+v, onOrigin is %+v, offset is %d, start is %d\n", onBacking, onOrigin, self.offset, start)
+		/*
+			fmt.Printf("onBacking is %+v, onOrigin is %+v, offset is %d, start is %d\n",
+				onBacking, onOrigin, self.offset, start)
+		*/
+
 		if len(onBacking) == 1 {
 			n, err = self.snap.myBackfile.ReadFromOffset(self.buf.AsBytes(), onBacking[0])
-			//if returns io.UN
+			//fmt.Printf("result of read backup %+v, %+v from %d\n", n, err, onBacking[0])
 			if err != nil && err != io.EOF {
 				return -1, err
 			}
 			if n == 0 {
 				return 0, io.EOF
 			}
+
+			//if the block is tail of originFile, it may have less than regionSize data;
+			//but myBackfile will read regionSize data, this will exceed the capacity of
+			//origin file. So, maxLen = Origin.Capacity() - start, n is the data returned.
+			//But we choose the small one to make sure the Read will not excceed Capacity()
+			self.waterHighMark = int(util.Min(uint64(maxLen), uint64(n)))
+			self.waterLowMark = int(self.offset % regionSize)
+			self.offset = start + uint64(self.waterHighMark)
 		} else if len(onOrigin) == 1 {
 			if _, err = self.snap.originFile.Seek(int64(uint64(onOrigin[0])*regionSize), io.SeekStart); err != nil {
 				panic("failed to seek")
 			}
 			n, err = io.ReadFull(self.snap.originFile, self.buf.AsBytes())
+			//fmt.Printf("result of read origin %+v, %+v\n", n, err)
+			//if originFile is shorter than expected
 			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 				return -1, err
 			}
 			if n == 0 {
 				return 0, io.EOF
 			}
+			//maxLen will always be equal to n assert(maxLen == n)
+			self.waterHighMark = n
+			self.waterLowMark = int(self.offset % regionSize)
+			self.offset = start + uint64(n)
 		} else {
 			panic("bad happend")
 		}
-		self.waterHighMark = n
-		self.waterLowMark = int(self.offset % self.snap.myBackfile.RegionSize())
-		self.offset += uint64(n)
 
 	}
-	//fmt.Printf("l is %d, n is %d, hi is %d, lo is %d\n", len(p), n, self.waterHighMark, self.waterLowMark)
+	//fmt.Printf("waterHighMark %d, waterLowMark %d, offset %d\n", self.waterHighMark, self.waterLowMark, self.offset)
 	l := len(p)
 	if l < self.waterHighMark-self.waterLowMark {
 		copy(p, self.buf.AsBytes()[self.waterLowMark:self.waterLowMark+l])
@@ -545,7 +566,9 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		return l, nil
 	} else {
 		copy(p, self.buf.AsBytes()[self.waterLowMark:])
-		return self.waterHighMark - self.waterLowMark, nil
+		n := self.waterHighMark - self.waterLowMark
+		self.waterLowMark += n
+		return n, nil
 	}
 }
 
@@ -609,8 +632,10 @@ func (self *SnapNVM) Write(buf []byte) (n int, err error) {
 	realPos := self.originFile.ViewStart() + start
 	if self.myBackfile != nil {
 		_, onOrigin := self.myBackfile.GetCopyOffset(realPos, realPos+uint64(len(buf)))
-		fmt.Printf("start backup for %+v, start is %d , realPos is start:end is %d:%d \n",
-			onOrigin, start, realPos, realPos+uint64(len(buf)))
+		/*
+			fmt.Printf("start backup for %+v, start is %d , realPos is start:end is %d:%d \n",
+				onOrigin, start, realPos, realPos+uint64(len(buf)))
+		*/
 		for i := 0; i < len(onOrigin); i++ {
 			//FIXMEFUCK
 			self.rawFile.Seek(int64(uint64(onOrigin[i])*self.myBackfile.RegionSize()), io.SeekStart)
@@ -620,13 +645,9 @@ func (self *SnapNVM) Write(buf []byte) (n int, err error) {
 			if n < 0 {
 				panic("fail to read data")
 			}
-			//n, err = self.originFile.Read(self.ab.AsBytes())
-			//fmt.Printf("n %d, err %+v\n", n, err)
-
+			//although n could be less than regionSize at the end of file, we still write
+			//the whole regionSize to backfile
 			self.myBackfile.WriteOffset(self.ab.AsBytes(), onOrigin[i])
-			//fmt.Printf("%d copied to backing file\n", onOrigin[i])
-			//a, b := self.myBackfile.GetCopyOffset((32 << 20), (32<<20)+1)
-			//fmt.Printf("issue: onbacking is %+v, onorigin is %+v\n", a, b)
 		}
 	}
 	self.originFile.Seek(int64(start), io.SeekStart)
@@ -683,7 +704,9 @@ func (self *SnapNVM) CreateSnapshotIfNeeded() (reader *SnapshotReader, err error
 	if self.myBackfile != nil {
 		return self.reader, nil
 	}
-	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(self.RawSize()))
+	size := self.originFile.Capacity()
+	fmt.Printf("creating backingfile raw size is %d\n", size)
+	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size))
 	regionSize := self.myBackfile.RegionSize()
 	self.ab = block.NewAlignedBytes(int(regionSize), block.Min())
 	if err != nil {
