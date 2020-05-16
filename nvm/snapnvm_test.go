@@ -92,7 +92,7 @@ func TestSimpleWriteSnapFile(t *testing.T) {
 	snap_nvm, err := NewSnapshotNVM(nvm)
 	assert.Nil(t, err)
 
-	snapshotReader, err := snap_nvm.CreateSnapshotIfNeeded()
+	err = snap_nvm.CreateSnapshotIfNeeded()
 	assert.Nil(t, err)
 	defer os.Remove(snap_nvm.myBackfile.GetFileName())
 
@@ -115,6 +115,8 @@ func TestSimpleWriteSnapFile(t *testing.T) {
 	assert.Equal(t, byte('b'), rbuf[1])
 
 	//snapshot read
+	snapshotReader, err := snap_nvm.GetSnapshotReader()
+	assert.Nil(t, err)
 	n, err = snapshotReader.Read(rbuf)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, n)
@@ -149,7 +151,7 @@ func TestOverWriteSnapFile(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1024, n)
 
-	snapshotReader, err := snap_nvm.CreateSnapshotIfNeeded()
+	snapshotReader, err := snap_nvm.GetSnapshotReader()
 	assert.Nil(t, err)
 	defer os.Remove(snap_nvm.myBackfile.GetFileName())
 	var rdata [1024]byte
@@ -236,7 +238,7 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 	dataNVM.Write(align(buf3))
 
 	//FIXME
-	snapshotReader, err := snap_nvm.CreateSnapshotIfNeeded()
+	snapshotReader, err := snap_nvm.GetSnapshotReader()
 	assert.Nil(t, err)
 	//header : 512
 	//journalRegionSize
@@ -275,7 +277,7 @@ func TestSnapfileBackup(t *testing.T) {
 		assert.Nil(t, err)
 	}
 
-	backupReader, err := snapFile.CreateSnapshotIfNeeded()
+	backupReader, err := snapFile.GetSnapshotReader()
 	assert.Nil(t, err)
 	defer os.Remove(snapFile.myBackfile.GetFileName())
 
@@ -325,6 +327,19 @@ func TestSnapfileBackup(t *testing.T) {
 	defer os.Remove("backup.file")
 	backupReader.Seek(0, io.SeekStart)
 	io.Copy(backfile, backupReader)
-	err = exec.Command("diff", "backup.file", "foo-test.lusf").Run()
+	err = exec.Command("cmp", "-s", "backup.file", "foo-test.lusf").Run()
 	assert.Nil(t, err)
+}
+
+func TestSnapDelete(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	assert.Nil(t, err)
+	defer os.Remove("foo-test.lusf")
+
+	snapNVM, err := NewSnapshotNVM(nvm)
+	assert.Nil(t, err)
+
+	_, err = snapNVM.GetSnapshotReader()
+	assert.Nil(t, err)
+	defer snapNVM.DeleteSnapshot()
 }

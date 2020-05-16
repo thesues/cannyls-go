@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/util"
@@ -22,7 +23,7 @@ import (
 var (
 	SNAP_MAGIC_NUMBER         = [4]byte{'s', 'n', 'a', 'p'}
 	SNAP_MAJOR_VERSION uint16 = 0
-	SNAP_MINOR_VERSION uint16 = 1
+	SNAP_MINOR_VERSION uint16 = 2
 )
 
 //Default RegionShift is 25 : 1<<25 == 32MB
@@ -33,40 +34,8 @@ type BackingFileHeader struct {
 	RegionShift  uint16
 	MaxCapacity  uint64
 	JournalSize  uint64
+	CreateTime   int64
 }
-
-//checkSum + tag + 4+4
-//checkSum + tag
-/*
-const (
-	TAG_END_BITMAP byte = 0
-	TAG_BITMAP     byte = 1
-)
-*/
-
-/*
-type Bitmap interface {
-	WriteTo(io.Writer) error
-	CheckSum() uint32
-	Tag() byte
-}
-*/
-
-/*
-type EndOfBitmap struct{}
-
-func (EndOfBitmap) Tag() byte {
-	return TAG_END_BITMAP
-}
-func (end EndOfBitmap) CheckSum() uint32 {
-	return 65537
-}
-func (end EndOfBitmap) WriteTo(writer io.Writer) (err error) {
-	err = binary.Write(writer, binary.BigEndian, end.CheckSum())
-	err = binary.Write(writer, binary.BigEndian, TAG_END_BITMAP)
-	return
-}
-*/
 
 //the unit is fraction of "1 << RegionShift" , default is 32MB
 type BitmapEntry struct {
@@ -153,6 +122,10 @@ func (self *BackingFileHeader) WriteTo(writer io.Writer) (err error) {
 	//单位是第几个32MB, 32MB * (1 << 32) = 128EB
 	//header_size + journal_size = start of data
 	if err = binary.Write(writer, binary.BigEndian, self.JournalSize); err != nil {
+		return
+	}
+
+	if err = binary.Write(writer, binary.BigEndian, self.CreateTime); err != nil {
 		return
 	}
 	return
@@ -252,6 +225,13 @@ func readBackingFileHeaderFrom(reader io.Reader) (header *BackingFileHeader, err
 		return nil, errors.Wrapf(internalerror.InvalidInput, "check: journalSize failed")
 	}
 
+	//CreateTime
+
+	var createTime int64
+	if err := binary.Read(reader, binary.BigEndian, &createTime); err != nil {
+		return nil, errors.Wrapf(internalerror.InvalidInput, "check: failed to read create time")
+	}
+
 	return &BackingFileHeader{
 		MajorVersion: majorVersion,
 		MinorVersion: minorVersion,
@@ -276,18 +256,18 @@ type BackingFile struct {
 	fileName       string
 }
 
-/*
-func (bf *BackingFile) getFileName() string {
-	return bf.uid.String() + "_lusf.snapshot"
-}
-*/
-
 func (bf *BackingFile) Close() {
 	bf.file.Close()
 }
 
 func (bf *BackingFile) Sync() {
 	bf.file.Sync()
+}
+
+func (bf *BackingFile) Delete() {
+	if err := os.Remove(bf.fileName); err != nil {
+		panic("delete failed")
+	}
 }
 
 //give [start, end) of the buf
@@ -381,6 +361,7 @@ func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, erro
 		RegionShift:  25, // 1<< 20, 32MB as default
 		MaxCapacity:  originFileSize,
 		JournalSize:  fromMaxCapacityToJournalSize(originFileSize, 25),
+		CreateTime:   time.Now().Unix(),
 	}
 
 	if err = header.WriteTo(file); err != nil {
@@ -577,7 +558,6 @@ type SnapNVM struct {
 	myBackfile *BackingFile
 	rawFile    *FileNVM
 	ab         *block.AlignedBytes
-	reader     *SnapshotReader
 	prefix     string
 	splited    bool
 }
@@ -617,7 +597,6 @@ func NewSnapshotNVM(originFile *FileNVM) (*SnapNVM, error) {
 	}
 	if myBackFile != nil {
 		regionSize := myBackFile.RegionSize()
-		snapNVM.reader = newSnapshotReader(snapNVM)
 		snapNVM.ab = block.NewAlignedBytes(int(regionSize), block.Min())
 	}
 	return snapNVM, nil
@@ -700,20 +679,33 @@ func (self *SnapNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolat
 	return sp1, sp2, nil
 }
 
-func (self *SnapNVM) CreateSnapshotIfNeeded() (reader *SnapshotReader, err error) {
+func (self *SnapNVM) GetSnapshotReader() (*SnapshotReader, error) {
+	if self.myBackfile == nil {
+		if err := self.CreateSnapshotIfNeeded(); err != nil {
+			return nil, err
+		}
+	}
+	return newSnapshotReader(self), nil
+
+}
+
+func (self *SnapNVM) DeleteSnapshot() {
 	if self.myBackfile != nil {
-		return self.reader, nil
+		self.myBackfile.Delete()
+		self.myBackfile = nil
+	}
+}
+
+func (self *SnapNVM) CreateSnapshotIfNeeded() (err error) {
+	if self.myBackfile != nil {
+		return errors.Errorf("only one snapshot instance allowed")
 	}
 	size := self.originFile.Capacity()
-	fmt.Printf("creating backingfile raw size is %d\n", size)
+	fmt.Printf("creating backingfile, Capacity is %d\n", size)
 	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size))
 	regionSize := self.myBackfile.RegionSize()
 	self.ab = block.NewAlignedBytes(int(regionSize), block.Min())
-	if err != nil {
-		return
-	}
-	self.reader = newSnapshotReader(self)
-	return self.reader, nil
+	return
 }
 
 //return SnapShotReader

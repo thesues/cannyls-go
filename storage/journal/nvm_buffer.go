@@ -85,7 +85,7 @@ func (jb *JournalNvmBuffer) Read(buf []byte) (n int, err error) {
 	}
 
 	innerReadSize, err := jb.nvm.Read(jb.readBuf.AsBytes())
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return -1, err
 	}
 
