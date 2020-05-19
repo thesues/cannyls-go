@@ -316,7 +316,7 @@ func TestSnapfileBackup(t *testing.T) {
 	assert.Equal(t, byte('a'), rbuf[0])
 
 	//snap read from origin file
-	backupReader.Seek((32<<20)*9, io.SeekStart)
+	backupReader.Seek((32<<20)*9+1024, io.SeekStart)
 	n, err = backupReader.Read(rbuf[:])
 	assert.Equal(t, 4096, n)
 	assert.Nil(t, err)

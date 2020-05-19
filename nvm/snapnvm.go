@@ -345,6 +345,7 @@ func (bf *BackingFile) WriteOffset(buf []byte, offset uint32) {
 	bf.JournalEnd += entry.Size()
 	//fmt.Printf("entry insert %d:%d\n", entry.OriginOffset, entry.SnapOffset)
 	bf.tree.Insert(uint64(entry.OriginOffset), uint64(entry.SnapOffset))
+	bf.file.Sync()
 }
 
 func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, error) {
@@ -370,7 +371,7 @@ func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, erro
 
 	file.Sync()
 
-	fmt.Printf("createing Backingfile journalSize is %d, dataStart At %d\n", header.JournalSize, 512+header.JournalSize)
+	fmt.Printf("Creating Backingfile journalSize is %d, dataStart At %d\n", header.JournalSize, 512+header.JournalSize)
 	return &BackingFile{
 		file:           file,
 		JournalStart:   512,
@@ -479,9 +480,6 @@ func (self *SnapshotReader) Seek(offset int64, whence int) (int64, error) {
 
 func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 
-	if self.offset == self.snap.rawFile.Capacity() {
-		return 0, io.EOF
-	}
 	if self.snap.originFile != self.snap.rawFile {
 		panic("for reader, rawFile == originFile")
 	}
@@ -494,6 +492,10 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 	maxLen := self.snap.rawFile.Capacity() - start
 	//read the whole region size
 	if self.waterHighMark == self.waterLowMark {
+
+		if self.offset == self.snap.rawFile.Capacity() {
+			return 0, io.EOF
+		}
 		onBacking, onOrigin := self.snap.myBackfile.GetCopyOffset(start, start+regionSize)
 		/*
 			fmt.Printf("onBacking is %+v, onOrigin is %+v, offset is %d, start is %d\n",
@@ -522,7 +524,7 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 				panic("failed to seek")
 			}
 			n, err = io.ReadFull(self.snap.originFile, self.buf.AsBytes())
-			//fmt.Printf("result of read origin %+v, %+v\n", n, err)
+			fmt.Printf("result of read origin %+v, %+v\n", n, err)
 			//if originFile is shorter than expected
 			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 				return -1, err
@@ -539,7 +541,10 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		}
 
 	}
-	//fmt.Printf("waterHighMark %d, waterLowMark %d, offset %d\n", self.waterHighMark, self.waterLowMark, self.offset)
+	/*
+		fmt.Printf("waterHighMark %d, waterLowMark %d, offset %d\n",
+			self.waterHighMark, self.waterLowMark, self.offset)
+	*/
 	l := len(p)
 	if l < self.waterHighMark-self.waterLowMark {
 		copy(p, self.buf.AsBytes()[self.waterLowMark:self.waterLowMark+l])
@@ -560,6 +565,7 @@ type SnapNVM struct {
 	ab         *block.AlignedBytes
 	prefix     string
 	splited    bool
+	rawSnapNVM *SnapNVM
 }
 
 func NewSnapshotNVM(originFile *FileNVM) (*SnapNVM, error) {
@@ -576,13 +582,14 @@ func NewSnapshotNVM(originFile *FileNVM) (*SnapNVM, error) {
 	pattern := fmt.Sprintf("%s/%s_*_lusf.snapshot", fileDirectory, prefix)
 	//fmt.Println(pattern)
 	matches, err := filepath.Glob(pattern)
-	fmt.Println(matches)
+	//fmt.Println(matches)
 	if err != nil {
 		panic(err.Error())
 	}
 	if len(matches) == 0 {
 		//myBackFile, err = CreateBackingFile(prefix, uint64(originFile.RawSize()))
 	} else if len(matches) == 1 {
+		fmt.Printf("found snapshot file %s\n", matches[0])
 		myBackFile, err = OpenBackingFile(matches[0])
 	}
 	if err != nil {
@@ -595,38 +602,42 @@ func NewSnapshotNVM(originFile *FileNVM) (*SnapNVM, error) {
 		rawFile:    originFile,
 		splited:    false,
 	}
+	//create ab for read data from
 	if myBackFile != nil {
 		regionSize := myBackFile.RegionSize()
 		snapNVM.ab = block.NewAlignedBytes(int(regionSize), block.Min())
 	}
+	snapNVM.rawSnapNVM = snapNVM
 	return snapNVM, nil
 }
 
 func (self *SnapNVM) Write(buf []byte) (n int, err error) {
-	if len(buf) > (32 << 20) {
-		panic("Write buf is too big")
-	}
 
 	start := self.originFile.Position() //start is a relative position
 	realPos := self.originFile.ViewStart() + start
-	if self.myBackfile != nil {
-		_, onOrigin := self.myBackfile.GetCopyOffset(realPos, realPos+uint64(len(buf)))
+	if self.rawSnapNVM.myBackfile != nil {
+
+		if len(buf) > int(self.rawSnapNVM.myBackfile.RegionSize()) {
+			panic("Write buf is too big")
+		}
+
+		_, onOrigin := self.rawSnapNVM.myBackfile.GetCopyOffset(realPos, realPos+uint64(len(buf)))
 		/*
 			fmt.Printf("start backup for %+v, start is %d , realPos is start:end is %d:%d \n",
 				onOrigin, start, realPos, realPos+uint64(len(buf)))
 		*/
 		for i := 0; i < len(onOrigin); i++ {
-			//FIXMEFUCK
-			self.rawFile.Seek(int64(uint64(onOrigin[i])*self.myBackfile.RegionSize()), io.SeekStart)
+			self.rawFile.Seek(int64(uint64(onOrigin[i])*self.rawSnapNVM.myBackfile.RegionSize()), io.SeekStart)
 
 			//fmt.Printf("offset is %d, len is %d\n", uint64(onOrigin[i])*self.myBackfile.RegionSize(), self.ab.Len())
-			n, err = io.ReadFull(self.rawFile, self.ab.AsBytes())
+			//fmt.Printf("raw file %+v, ab. len %d\n", self.rawFile, self.ab.Len())
+			n, err = io.ReadFull(self.rawFile, self.rawSnapNVM.ab.AsBytes())
 			if n < 0 {
 				panic("fail to read data")
 			}
 			//although n could be less than regionSize at the end of file, we still write
 			//the whole regionSize to backfile
-			self.myBackfile.WriteOffset(self.ab.AsBytes(), onOrigin[i])
+			self.rawSnapNVM.myBackfile.WriteOffset(self.rawSnapNVM.ab.AsBytes(), onOrigin[i])
 		}
 	}
 	self.originFile.Seek(int64(start), io.SeekStart)
@@ -643,6 +654,9 @@ func (self *SnapNVM) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (self *SnapNVM) Close() error {
+	if self.splited {
+		return errors.Errorf("can not close splited NVM")
+	}
 	if self.myBackfile != nil {
 		self.myBackfile.Sync()
 		self.myBackfile.Close()
@@ -658,6 +672,7 @@ func (self *SnapNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolat
 		myBackfile: self.myBackfile,
 		ab:         self.ab,
 		rawFile:    self.rawFile,
+		rawSnapNVM: self.rawSnapNVM,
 		splited:    true,
 		/*
 			viewStart:  self.originFile.ViewStart(),
@@ -670,6 +685,7 @@ func (self *SnapNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolat
 		myBackfile: self.myBackfile,
 		ab:         self.ab,
 		rawFile:    self.rawFile,
+		rawSnapNVM: self.rawSnapNVM,
 		splited:    true,
 		/*
 			viewStart:  self.originFile.ViewStart() + position,
@@ -680,29 +696,41 @@ func (self *SnapNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolat
 }
 
 func (self *SnapNVM) GetSnapshotReader() (*SnapshotReader, error) {
+	if self.splited {
+		return nil, errors.Errorf("can not create snapshot in splited NVM")
+	}
 	if self.myBackfile == nil {
 		if err := self.CreateSnapshotIfNeeded(); err != nil {
 			return nil, err
 		}
 	}
 	return newSnapshotReader(self), nil
-
 }
 
-func (self *SnapNVM) DeleteSnapshot() {
+func (self *SnapNVM) DeleteSnapshot() error {
+	if self.splited {
+		return errors.Errorf("can not create snapshot in splited NVM")
+	}
 	if self.myBackfile != nil {
 		self.myBackfile.Delete()
 		self.myBackfile = nil
 	}
+	return nil
 }
 
 func (self *SnapNVM) CreateSnapshotIfNeeded() (err error) {
+	if self.splited {
+		return errors.Errorf("can not create snapshot in splited NVM")
+	}
 	if self.myBackfile != nil {
 		return errors.Errorf("only one snapshot instance allowed")
 	}
 	size := self.originFile.Capacity()
-	fmt.Printf("creating backingfile, Capacity is %d\n", size)
 	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size))
+	fmt.Printf("backingfile is %v\n", self.myBackfile)
+	if err != nil {
+		return err
+	}
 	regionSize := self.myBackfile.RegionSize()
 	self.ab = block.NewAlignedBytes(int(regionSize), block.Min())
 	return

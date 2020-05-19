@@ -171,6 +171,11 @@ func (jb *JournalNvmBuffer) flushWriteBuffer() error {
 	if _, err := jb.nvm.Write(jb.writeBuf.AsBytes()); err != nil {
 		return err
 	}
+	/*
+		x := jb.nvm.(*nvm.SnapNVM)
+		x.CreateSnapshotIfNeeded()
+		fmt.Printf("nvm buffer %+v\n", x.Fuck())
+	*/
 
 	//Save the last sector to prevent from reread if write buf is bigger than one sector
 	if jb.writeBuf.Len() > uint32(jb.BlockSize().AsU16()) {

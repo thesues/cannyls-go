@@ -37,7 +37,7 @@ type Storage struct {
 	dataRegion            *DataRegion
 	journalRegion         *journal.JournalRegion
 	index                 *lumpindex.LumpIndex
-	innerNVM              nvm.NonVolatileMemory
+	innerNVM              *nvm.SnapNVM
 	alloc                 allocator.DataPortionAlloc
 	updateCapacityStopper *util.Stopper
 }
@@ -57,9 +57,13 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	if err != nil {
 		return nil, err
 	}
+	snapNVM, err := nvm.NewSnapshotNVM(file)
+	if err != nil {
+		return nil, err
+	}
 
 	index := lumpindex.NewIndex()
-	journalNVM, dataNVM := header.SplitRegion(file)
+	journalNVM, dataNVM := header.SplitRegion(snapNVM)
 
 	journalRegion, err := journal.OpenJournalRegion(journalNVM)
 	if err != nil {
@@ -79,7 +83,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	alloc := allocator.NewJudyAlloc()
 
 	//  use RestoreFromIndex as default
-	alloc.RestoreFromIndex(file.BlockSize(), header.DataRegionSize, index.DataPortions())
+	alloc.RestoreFromIndex(snapNVM.BlockSize(), header.DataRegionSize, index.DataPortions())
 	/*
 		alloc.RestoreFromIndexWithJudy(file.BlockSize(), header.DataRegionSize, index.JudyDataPortions())
 
@@ -96,7 +100,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 		dataRegion:            dataRegion,
 		journalRegion:         journalRegion,
 		index:                 index,
-		innerNVM:              file,
+		innerNVM:              snapNVM,
 		alloc:                 alloc,
 		updateCapacityStopper: util.NewStopper(),
 	}
@@ -135,26 +139,30 @@ func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (
 	if err != nil {
 		return nil, err
 	}
+	snapNVM, err := nvm.NewSnapshotNVM(file)
+	if err != nil {
+		return nil, err
+	}
 
 	headBuf := new(bytes.Buffer)
-	header := makeHeader(file, journal_ratio)
+	header := makeHeader(snapNVM, journal_ratio)
 
 	if err = header.WriteHeaderRegionTo(headBuf); err != nil {
 		return nil, err
 	}
 	//now headBuf's len should be at least 512
 
-	journal.InitialJournalRegion(headBuf, file.BlockSize())
+	journal.InitialJournalRegion(headBuf, snapNVM.BlockSize())
 	//headbuf should be header(512) + (journal header)512 + (journal)512
 
-	alignedBufHead := block.FromBytes(headBuf.Bytes(), file.BlockSize())
+	alignedBufHead := block.FromBytes(headBuf.Bytes(), snapNVM.BlockSize())
 	alignedBufHead.Align()
-	file.Write(alignedBufHead.AsBytes())
+	snapNVM.Write(alignedBufHead.AsBytes())
 
-	if err = file.Sync(); err != nil {
+	if err = snapNVM.Sync(); err != nil {
 		return nil, err
 	}
-	file.Close()
+	snapNVM.Close()
 
 	return OpenCannylsStorage(path)
 }
@@ -210,6 +218,18 @@ func (store *Storage) List() []lump.LumpId {
 	return store.index.List()
 }
 
+func (store *Storage) CreateSnapshot() error {
+	return store.innerNVM.CreateSnapshotIfNeeded()
+}
+
+func (store *Storage) GetSnapshotReader() (*nvm.SnapshotReader, error) {
+	reader, err := store.innerNVM.GetSnapshotReader()
+	if err != nil {
+		return nil, errors.Errorf("failed to get Snapshot reader %+v", err)
+	}
+	return reader, err
+}
+
 func (store *Storage) Usage() StorageUsage {
 	blockSize := uint64(store.Header().BlockSize.AsU16())
 	return StorageUsage{
@@ -218,7 +238,7 @@ func (store *Storage) Usage() StorageUsage {
 		FileCounts:        store.index.Count(),
 		DataFreeBytes:     store.alloc.FreeCount() * blockSize,
 		JournalUsageBytes: store.journalRegion.Usage(),
-		MaxSegmentSize:    util.Min(lump.LUMP_MAX_SIZE, store.alloc.MaxSegmentSize() * blockSize - 2), 
+		MaxSegmentSize:    util.Min(lump.LUMP_MAX_SIZE, store.alloc.MaxSegmentSize()*blockSize-2),
 		//	CurrentFileSize: uint64(store.innerNVM.RawSize()),
 	}
 }
