@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"io"
 	"os"
@@ -37,6 +38,14 @@ func favicon(w http.ResponseWriter, r *http.Request) {
 //getalloc is not thread-safe.
 type GetAllocRequest struct {
 	resultChan chan []float64
+}
+
+var backupRuning bool = false
+var mutex sync.Mutex
+
+type BackupRequest struct {
+	onlyCreateSnapshot bool
+	resultChan         chan bool
 }
 
 //put
@@ -82,6 +91,10 @@ func chooseID(store *storage.Storage) (lump.LumpId, bool) {
 }
 
 func handleGetRequest(store *storage.Storage, request GetRequest) {
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	var response GetResult
 	select {
 	case <-request.ctx.Done():
@@ -107,8 +120,86 @@ func handleGetRequest(store *storage.Storage, request GetRequest) {
 	}
 }
 
+func handleBackupRequest(store *storage.Storage, request BackupRequest) {
+	if request.onlyCreateSnapshot {
+		//lock
+		mutex.Lock()
+		err := store.CreateSnapshot()
+		mutex.Unlock()
+		//unlock
+		if err != nil {
+			request.resultChan <- false
+			return
+		}
+		request.resultChan <- true
+		return
+	}
+
+	if backupRuning {
+		request.resultChan <- false
+		return
+	}
+
+	//lock()
+	mutex.Lock()
+	store.JournalSync()
+	reader, err := store.GetSnapshotReader()
+	mutex.Unlock()
+	//unlock()
+	if err != nil {
+		request.resultChan <- false
+		return
+	}
+	backupStopper := util.NewStopper()
+
+	backupStopper.RunWorker(func() {
+		//open backup file, name is start time
+		defer func() {
+			backupRuning = false
+		}()
+		fileName := time.Now().Format(time.RFC3339) + "_backup.lusf"
+		backfile, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+		if err != nil {
+			return
+		}
+		var buf [512 << 10]byte
+		for {
+			select {
+			case <-backupStopper.ShouldStop():
+				backfile.Close()
+				return
+			case <-time.After(100 * time.Millisecond):
+				//lock
+				mutex.Lock()
+				n, err := reader.Read(buf[:])
+				mutex.Unlock()
+				fmt.Printf("copy out data %d, %+v\n", n, err)
+				//unlock
+				if err != nil && err != io.EOF {
+					return
+				}
+				if n == 0 {
+					mutex.Lock()
+					store.DeleteSnapshot()
+					mutex.Unlock()
+					backfile.Close()
+					return
+				}
+				n, err = backfile.Write(buf[0:n])
+				if err != nil {
+					return
+				}
+			}
+		}
+	})
+	request.resultChan <- true
+
+}
+
 func handleRandomRequest(store *storage.Storage, request DeleteRequest) {
 
+	mutex.Lock()
+	defer mutex.Unlock()
 	var response GetResult
 	var err error
 	select {
@@ -147,11 +238,16 @@ END:
 }
 
 func handleAllocRequest(store *storage.Storage, request GetAllocRequest) {
+	mutex.Lock()
+	defer mutex.Unlock()
 	vec := store.GetAllocationStatus()
 	request.resultChan <- vec
 }
 
 func handlePutRequest(store *storage.Storage, request PutRequest) {
+
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	var response PutResult
 
@@ -214,6 +310,8 @@ func ServeStore(store *storage.Storage) {
 					handleRandomRequest(store, request.(DeleteRequest))
 				case GetAllocRequest:
 					handleAllocRequest(store, request.(GetAllocRequest))
+				case BackupRequest:
+					handleBackupRequest(store, request.(BackupRequest))
 				}
 			case <-time.After(3 * time.Second):
 				store.RunSideJobOnce()
@@ -306,6 +404,41 @@ func ServeStore(store *storage.Storage) {
 		case <-ctx.Done():
 			c.String(400, "TIMEOUT")
 		}
+	})
+
+	r.POST("/snapshot/:op", func(c *gin.Context) {
+		op := c.Param("op")
+		var onlyCreateSnapshot bool
+		switch op {
+		case "backup":
+			onlyCreateSnapshot = false
+		case "create":
+			onlyCreateSnapshot = true
+		default:
+			c.String(400, "input is invalid")
+			return
+		}
+
+		request := BackupRequest{
+			onlyCreateSnapshot: onlyCreateSnapshot,
+			resultChan:         make(chan bool),
+		}
+		ctx := context.Background()
+		reqeustChan <- request
+
+		select {
+		case success := <-request.resultChan:
+			if !success {
+				c.String(400, "no")
+				return
+			} else {
+				c.String(200, "created")
+				return
+			}
+		case <-ctx.Done():
+			c.String(400, "TIMEOUT")
+		}
+
 	})
 
 	r.POST("/put/*id", func(c *gin.Context) {

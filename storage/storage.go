@@ -219,10 +219,16 @@ func (store *Storage) List() []lump.LumpId {
 }
 
 func (store *Storage) CreateSnapshot() error {
+	store.JournalSync()
 	return store.innerNVM.CreateSnapshotIfNeeded()
 }
 
+func (store *Storage) DeleteSnapshot() error {
+	return store.innerNVM.DeleteSnapshot()
+}
+
 func (store *Storage) GetSnapshotReader() (*nvm.SnapshotReader, error) {
+	store.JournalSync()
 	reader, err := store.innerNVM.GetSnapshotReader()
 	if err != nil {
 		return nil, errors.Errorf("failed to get Snapshot reader %+v", err)
