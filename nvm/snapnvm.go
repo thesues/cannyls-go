@@ -23,7 +23,7 @@ import (
 var (
 	SNAP_MAGIC_NUMBER         = [4]byte{'s', 'n', 'a', 'p'}
 	SNAP_MAJOR_VERSION uint16 = 0
-	SNAP_MINOR_VERSION uint16 = 2
+	SNAP_MINOR_VERSION uint16 = 3
 )
 
 //Default RegionShift is 25 : 1<<25 == 32MB
@@ -35,6 +35,7 @@ type BackingFileHeader struct {
 	MaxCapacity  uint64
 	JournalSize  uint64
 	CreateTime   int64
+	RawCapacity  uint64
 }
 
 //the unit is fraction of "1 << RegionShift" , default is 32MB
@@ -126,6 +127,10 @@ func (self *BackingFileHeader) WriteTo(writer io.Writer) (err error) {
 	}
 
 	if err = binary.Write(writer, binary.BigEndian, self.CreateTime); err != nil {
+		return
+	}
+
+	if err = binary.Write(writer, binary.BigEndian, self.RawCapacity); err != nil {
 		return
 	}
 	return
@@ -232,6 +237,11 @@ func readBackingFileHeaderFrom(reader io.Reader) (header *BackingFileHeader, err
 		return nil, errors.Wrapf(internalerror.InvalidInput, "check: failed to read create time")
 	}
 
+	var rawCapacity uint64
+	if err := binary.Read(reader, binary.BigEndian, &rawCapacity); err != nil {
+		return nil, errors.Wrapf(internalerror.InvalidInput, "check: failed to read create time")
+	}
+
 	return &BackingFileHeader{
 		MajorVersion: majorVersion,
 		MinorVersion: minorVersion,
@@ -239,6 +249,7 @@ func readBackingFileHeaderFrom(reader io.Reader) (header *BackingFileHeader, err
 		RegionShift:  regionShift,
 		MaxCapacity:  maxCapacity,
 		JournalSize:  journalSize,
+		RawCapacity:  rawCapacity,
 	}, nil
 }
 
@@ -250,6 +261,7 @@ type BackingFile struct {
 	dataStart      uint64
 	dataEnd        uint64
 	maxCapacity    uint64 //max_raw_size = 512 + journalMaxSize + maxCapacity
+	rawCapacity    uint64
 	uid            uuid.UUID
 	tree           judy.JudyL
 	regionSize     uint64
@@ -348,7 +360,7 @@ func (bf *BackingFile) WriteOffset(buf []byte, offset uint32) {
 	bf.file.Sync()
 }
 
-func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, error) {
+func CreateBackingFile(prefix string, maxCapacity uint64, currentCapacity uint64) (*BackingFile, error) {
 	uuidFile := uuid.NewV4()
 	fileName := prefix + "_" + uuidFile.String() + "_lusf.snapshot"
 	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0755)
@@ -360,9 +372,10 @@ func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, erro
 		MinorVersion: SNAP_MINOR_VERSION,
 		UUID:         uuidFile,
 		RegionShift:  25, // 1<< 20, 32MB as default
-		MaxCapacity:  originFileSize,
-		JournalSize:  fromMaxCapacityToJournalSize(originFileSize, 25),
+		MaxCapacity:  maxCapacity,
+		JournalSize:  fromMaxCapacityToJournalSize(maxCapacity, 25),
 		CreateTime:   time.Now().Unix(),
+		RawCapacity:  currentCapacity,
 	}
 
 	if err = header.WriteTo(file); err != nil {
@@ -379,6 +392,7 @@ func CreateBackingFile(prefix string, originFileSize uint64) (*BackingFile, erro
 		dataStart:      512 + header.JournalSize,
 		dataEnd:        512 + header.JournalSize,
 		maxCapacity:    header.MaxCapacity,
+		rawCapacity:    header.RawCapacity,
 		tree:           judy.JudyL{},
 		uid:            uuidFile,
 		regionSize:     1 << header.RegionShift,
@@ -431,10 +445,12 @@ func OpenBackingFile(fileName string) (*BackingFile, error) {
 		dataStart:      dataStart,
 		dataEnd:        dataEnd,
 		maxCapacity:    header.MaxCapacity,
+		rawCapacity:    header.RawCapacity,
 		tree:           tree,
 		uid:            header.UUID,
 		regionSize:     1 << header.RegionShift,
 		journalMaxSize: header.JournalSize,
+		fileName:       fileName,
 	}, nil
 }
 
@@ -448,6 +464,7 @@ type SnapshotReader struct {
 
 func newSnapshotReader(snap *SnapNVM) *SnapshotReader {
 	ab := block.NewAlignedBytes(int(snap.myBackfile.RegionSize()), block.Min())
+	fmt.Printf("FUUUUUCK creating snap reader %+v\n", snap.myBackfile)
 	return &SnapshotReader{
 		snap:          snap,
 		buf:           ab,
@@ -460,6 +477,9 @@ func newSnapshotReader(snap *SnapNVM) *SnapshotReader {
 func (self *SnapshotReader) Seek(offset int64, whence int) (int64, error) {
 	self.waterHighMark = 0
 	self.waterLowMark = 0
+	if offset > int64(self.snap.myBackfile.rawCapacity) {
+		return 0, errors.Errorf("fail to seek to %d, rawCapacity is %d", offset, self.snap.myBackfile.rawCapacity)
+	}
 	switch whence {
 	case 0:
 		self.offset = uint64(offset)
@@ -489,11 +509,11 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		panic("Read data too big")
 	}
 	start := self.offset / regionSize * regionSize
-	maxLen := self.snap.rawFile.Capacity() - start
+	maxLen := self.snap.myBackfile.rawCapacity - start
 	//read the whole region size
 	if self.waterHighMark == self.waterLowMark {
 
-		if self.offset == self.snap.rawFile.Capacity() {
+		if self.offset == self.snap.myBackfile.rawCapacity {
 			return 0, io.EOF
 		}
 		onBacking, onOrigin := self.snap.myBackfile.GetCopyOffset(start, start+regionSize)
@@ -503,6 +523,7 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		*/
 
 		if len(onBacking) == 1 {
+			self.buf.Resize(uint32(self.snap.myBackfile.regionSize))
 			n, err = self.snap.myBackfile.ReadFromOffset(self.buf.AsBytes(), onBacking[0])
 			//fmt.Printf("result of read backup %+v, %+v from %d\n", n, err, onBacking[0])
 			if err != nil && err != io.EOF {
@@ -520,11 +541,12 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 			self.waterLowMark = int(self.offset % regionSize)
 			self.offset = start + uint64(self.waterHighMark)
 		} else if len(onOrigin) == 1 {
+			self.buf.Resize(uint32(maxLen))
 			if _, err = self.snap.originFile.Seek(int64(uint64(onOrigin[0])*regionSize), io.SeekStart); err != nil {
 				panic("failed to seek")
 			}
 			n, err = io.ReadFull(self.snap.originFile, self.buf.AsBytes())
-			fmt.Printf("result of read origin %+v, %+v\n", n, err)
+			fmt.Printf("result of read origin %+v,raw size is %d, err is %+v\n", n, self.snap.rawFile.RawSize(), err)
 			//if originFile is shorter than expected
 			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 				return -1, err
@@ -725,9 +747,11 @@ func (self *SnapNVM) CreateSnapshotIfNeeded() (err error) {
 	if self.myBackfile != nil {
 		return errors.Errorf("only one snapshot instance allowed")
 	}
-	size := self.originFile.Capacity()
-	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size))
-	fmt.Printf("backingfile is %v\n", self.myBackfile)
+	//size := self.originFile.Capacity()
+	size := self.rawFile.Capacity()
+	//self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size), uint64(self.originFile.RawSize()))
+	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size), uint64(self.rawFile.RawSize()))
+	fmt.Printf("backingfile is %+v\n", self.myBackfile)
 	if err != nil {
 		return err
 	}
@@ -751,7 +775,7 @@ func (self *SnapNVM) Position() uint64 {
 }
 
 func (self *SnapNVM) RawSize() int64 {
-	return self.originFile.RawSize() //FIXME, add backing file size
+	return self.rawFile.RawSize()
 }
 
 func (self *SnapNVM) Sync() error {

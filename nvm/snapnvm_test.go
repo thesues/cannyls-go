@@ -12,13 +12,13 @@ import (
 )
 
 func TestBackingFileCreate(t *testing.T) {
-	f, err := CreateBackingFile("test", 10<<20)
+	f, err := CreateBackingFile("test", 10<<20, 10<<20)
 	assert.Nil(t, err)
 	defer os.Remove(f.fileName)
 }
 
 func TestBackingFileOpen(t *testing.T) {
-	f, err := CreateBackingFile("test", 10<<20)
+	f, err := CreateBackingFile("test", 10<<20, 10<<20)
 	defer os.Remove(f.fileName)
 	assert.Nil(t, err)
 	fileName := f.fileName
@@ -233,9 +233,12 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 	journalNVM, dataNVM = header.SplitRegion(snap_nvm)
 
 	buf3 := arrayWithValueSize(512, 101)
-	fmt.Printf("Capacity is %d\n", journalNVM.Capacity())
+	fmt.Printf("splited journalNVM's Capacity is %d\n", journalNVM.Capacity())
 	journalNVM.Write(align(buf3))
 	dataNVM.Write(align(buf3))
+	//???????????
+	snap_nvm.Sync()
+	fmt.Printf("raw size is %d\n", snap_nvm.RawSize())
 
 	//FIXME
 	snapshotReader, err := snap_nvm.GetSnapshotReader()
