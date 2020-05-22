@@ -492,7 +492,7 @@ func (self *SnapshotReader) Seek(offset int64, whence int) (int64, error) {
 	default:
 		return 0, errors.New("failed to seek")
 	}
-	if self.offset > self.snap.rawFile.Capacity() {
+	if self.offset > self.snap.originFile.Capacity() {
 		return 0, errors.Errorf("offset is bigger than Capacity")
 	}
 	return int64(self.offset), nil
@@ -500,9 +500,6 @@ func (self *SnapshotReader) Seek(offset int64, whence int) (int64, error) {
 
 func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 
-	if self.snap.originFile != self.snap.rawFile {
-		panic("for reader, rawFile == originFile")
-	}
 	regionSize := self.snap.myBackfile.RegionSize()
 	/* local buffer is empty */
 	if uint64(len(p)) > self.snap.myBackfile.RegionSize() {
@@ -538,7 +535,7 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 				panic("failed to seek")
 			}
 			n, err = io.ReadFull(self.snap.originFile, self.buf.AsBytes())
-			fmt.Printf("result of read origin %+v,raw size is %d, err is %+v\n", n, self.snap.rawFile.RawSize(), err)
+			fmt.Printf("result of read origin %+v,raw size is %d, err is %+v\n", n, self.snap.originFile.RawSize(), err)
 			//if originFile is shorter than expected
 			if err != nil && err != io.EOF {
 				return -1, err
@@ -574,7 +571,6 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 type SnapNVM struct {
 	originFile *FileNVM
 	myBackfile *BackingFile
-	rawFile    *FileNVM
 	ab         *block.AlignedBytes
 	prefix     string
 	splited    bool
@@ -612,7 +608,6 @@ func NewSnapshotNVM(originFile *FileNVM) (*SnapNVM, error) {
 		originFile: originFile,
 		myBackfile: myBackFile,
 		prefix:     prefix,
-		rawFile:    originFile,
 		splited:    false,
 	}
 	//create ab for read data from
@@ -633,6 +628,7 @@ func (self *SnapNVM) Write(buf []byte) (n int, err error) {
 		if len(buf) > int(self.rawSnapNVM.myBackfile.RegionSize()) {
 			panic("Write buf is too big")
 		}
+		rawFile := self.rawSnapNVM.originFile
 
 		_, onOrigin := self.rawSnapNVM.myBackfile.GetCopyOffset(realPos, realPos+uint64(len(buf)))
 		/*
@@ -640,11 +636,11 @@ func (self *SnapNVM) Write(buf []byte) (n int, err error) {
 				onOrigin, start, realPos, realPos+uint64(len(buf)))
 		*/
 		for i := 0; i < len(onOrigin); i++ {
-			self.rawFile.Seek(int64(uint64(onOrigin[i])*self.rawSnapNVM.myBackfile.RegionSize()), io.SeekStart)
+			rawFile.Seek(int64(uint64(onOrigin[i])*self.rawSnapNVM.myBackfile.RegionSize()), io.SeekStart)
 
 			//fmt.Printf("offset is %d, len is %d\n", uint64(onOrigin[i])*self.myBackfile.RegionSize(), self.ab.Len())
-			//fmt.Printf("raw file %+v, ab. len %d\n", self.rawFile, self.ab.Len())
-			n, err = io.ReadFull(self.rawFile, self.rawSnapNVM.ab.AsBytes())
+			//fmt.Printf("raw file %+v, ab. len %d\n", rawFile, self.ab.Len())
+			n, err = io.ReadFull(rawFile, self.rawSnapNVM.ab.AsBytes())
 			if n < 0 {
 				panic("fail to read data")
 			}
@@ -684,7 +680,6 @@ func (self *SnapNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolat
 		originFile: left.(*FileNVM),
 		myBackfile: self.myBackfile,
 		ab:         self.ab,
-		rawFile:    self.rawFile,
 		rawSnapNVM: self.rawSnapNVM,
 		splited:    true,
 		/*
@@ -697,7 +692,6 @@ func (self *SnapNVM) Split(position uint64) (sp1 NonVolatileMemory, sp2 NonVolat
 		originFile: right.(*FileNVM),
 		myBackfile: self.myBackfile,
 		ab:         self.ab,
-		rawFile:    self.rawFile,
 		rawSnapNVM: self.rawSnapNVM,
 		splited:    true,
 		/*
@@ -738,10 +732,9 @@ func (self *SnapNVM) CreateSnapshotIfNeeded() (err error) {
 	if self.myBackfile != nil {
 		return errors.Errorf("only one snapshot instance allowed")
 	}
-	//size := self.originFile.Capacity()
-	size := self.rawFile.Capacity()
-	//self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size), uint64(self.originFile.RawSize()))
-	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size), uint64(self.rawFile.RawSize()))
+	size := self.originFile.Capacity()
+
+	self.myBackfile, err = CreateBackingFile(self.prefix, uint64(size), uint64(self.originFile.RawSize()))
 	fmt.Printf("backingfile is %+v\n", self.myBackfile)
 	if err != nil {
 		return err
@@ -766,7 +759,7 @@ func (self *SnapNVM) Position() uint64 {
 }
 
 func (self *SnapNVM) RawSize() int64 {
-	return self.rawFile.RawSize()
+	return self.rawSnapNVM.originFile.RawSize()
 }
 
 func (self *SnapNVM) Sync() error {
