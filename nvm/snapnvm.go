@@ -21,9 +21,10 @@ import (
 )
 
 var (
-	SNAP_MAGIC_NUMBER         = [4]byte{'s', 'n', 'a', 'p'}
-	SNAP_MAJOR_VERSION uint16 = 0
-	SNAP_MINOR_VERSION uint16 = 3
+	SNAP_MAGIC_NUMBER           = [4]byte{'s', 'n', 'a', 'p'}
+	SNAP_MAJOR_VERSION   uint16 = 0
+	SNAP_MINOR_VERSION   uint16 = 3
+	DEFAULT_REGION_SHIFT uint16 = 25
 )
 
 //Default RegionShift is 25 : 1<<25 == 32MB
@@ -211,7 +212,7 @@ func readBackingFileHeaderFrom(reader io.Reader) (header *BackingFileHeader, err
 		return nil, errors.Wrapf(internalerror.InvalidInput, "read region shift failed")
 	}
 	//check regionShift
-	if regionShift < 25 {
+	if regionShift > 25 || regionShift < 20 {
 		return nil, errors.Wrapf(internalerror.InvalidInput, "check: regionShift is less than 25")
 	}
 
@@ -371,9 +372,9 @@ func CreateBackingFile(prefix string, maxCapacity uint64, currentCapacity uint64
 		MajorVersion: SNAP_MAJOR_VERSION,
 		MinorVersion: SNAP_MINOR_VERSION,
 		UUID:         uuidFile,
-		RegionShift:  25, // 1<< 20, 32MB as default
+		RegionShift:  DEFAULT_REGION_SHIFT, // 1<< 20, 32MB as default
 		MaxCapacity:  maxCapacity,
-		JournalSize:  fromMaxCapacityToJournalSize(maxCapacity, 25),
+		JournalSize:  fromMaxCapacityToJournalSize(maxCapacity, DEFAULT_REGION_SHIFT),
 		CreateTime:   time.Now().Unix(),
 		RawCapacity:  currentCapacity,
 	}
@@ -464,7 +465,6 @@ type SnapshotReader struct {
 
 func newSnapshotReader(snap *SnapNVM) *SnapshotReader {
 	ab := block.NewAlignedBytes(int(snap.myBackfile.RegionSize()), block.Min())
-	fmt.Printf("FUUUUUCK creating snap reader %+v\n", snap.myBackfile)
 	return &SnapshotReader{
 		snap:          snap,
 		buf:           ab,
@@ -509,7 +509,7 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 		panic("Read data too big")
 	}
 	start := self.offset / regionSize * regionSize
-	maxLen := self.snap.myBackfile.rawCapacity - start
+	maxLen := util.Min(self.snap.myBackfile.rawCapacity-start, regionSize)
 	//read the whole region size
 	if self.waterHighMark == self.waterLowMark {
 
@@ -532,14 +532,6 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 			if n == 0 {
 				return 0, io.EOF
 			}
-
-			//if the block is tail of originFile, it may have less than regionSize data;
-			//but myBackfile will read regionSize data, this will exceed the capacity of
-			//origin file. So, maxLen = Origin.Capacity() - start, n is the data returned.
-			//But we choose the small one to make sure the Read will not excceed Capacity()
-			self.waterHighMark = int(util.Min(uint64(maxLen), uint64(n)))
-			self.waterLowMark = int(self.offset % regionSize)
-			self.offset = start + uint64(self.waterHighMark)
 		} else if len(onOrigin) == 1 {
 			self.buf.Resize(uint32(maxLen))
 			if _, err = self.snap.originFile.Seek(int64(uint64(onOrigin[0])*regionSize), io.SeekStart); err != nil {
@@ -548,19 +540,18 @@ func (self *SnapshotReader) Read(p []byte) (n int, err error) {
 			n, err = io.ReadFull(self.snap.originFile, self.buf.AsBytes())
 			fmt.Printf("result of read origin %+v,raw size is %d, err is %+v\n", n, self.snap.rawFile.RawSize(), err)
 			//if originFile is shorter than expected
-			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			if err != nil && err != io.EOF {
 				return -1, err
 			}
 			if n == 0 {
 				return 0, io.EOF
 			}
-			//maxLen will always be equal to n assert(maxLen == n)
-			self.waterHighMark = n
-			self.waterLowMark = int(self.offset % regionSize)
-			self.offset = start + uint64(n)
 		} else {
 			panic("bad happend")
 		}
+		self.waterHighMark = int(util.Min(uint64(maxLen), uint64(n)))
+		self.waterLowMark = int(self.offset % regionSize)
+		self.offset = start + uint64(self.waterHighMark)
 
 	}
 	/*

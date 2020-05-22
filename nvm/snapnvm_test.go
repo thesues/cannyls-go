@@ -22,8 +22,9 @@ func TestBackingFileOpen(t *testing.T) {
 	defer os.Remove(f.fileName)
 	assert.Nil(t, err)
 	fileName := f.fileName
-	var buf [32 << 20]byte
-	buf[(32<<20)-1] = 'a'
+	buf := make([]byte, f.RegionSize())
+	regionSize := f.RegionSize()
+	buf[regionSize-1] = 'a'
 
 	//1M(*) 2M 3M(*) 4M 5M 6M(*)
 	f.WriteOffset(buf[:], 0)
@@ -32,16 +33,16 @@ func TestBackingFileOpen(t *testing.T) {
 
 	f, err = OpenBackingFile(fileName)
 	assert.Equal(t, uint64(512+12*2), f.JournalEnd)
-	assert.Equal(t, f.dataStart+(32<<20)*2, f.dataEnd)
+	assert.Equal(t, f.dataStart+(regionSize)*2, f.dataEnd)
 
-	onBacking, onOrigin := f.GetCopyOffset((32<<20)-100, (32<<20)+100)
+	onBacking, onOrigin := f.GetCopyOffset((regionSize)-100, (regionSize)+100)
 	assert.Equal(t, uint64(1024), f.dataStart)
 	assert.Equal(t, 1, len(onBacking))
 	assert.Equal(t, 1, len(onOrigin))
 	assert.Equal(t, uint32(0), onBacking[0])
 	assert.Equal(t, uint32(1), onOrigin[0])
 
-	onBacking, onOrigin = f.GetCopyOffset((32 << 20), (32<<20)*2)
+	onBacking, onOrigin = f.GetCopyOffset((regionSize), (regionSize)*2)
 	assert.Equal(t, 1, len(onOrigin))
 	assert.Equal(t, 0, len(onBacking))
 	assert.Equal(t, uint32(1), onOrigin[0])
