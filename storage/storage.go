@@ -534,3 +534,50 @@ func (store *Storage) Close() {
 func (store *Storage) RunSideJobOnce() {
 	store.journalRegion.RunSideJobOnce(store.index)
 }
+
+//added API for raft log and raft apply
+
+func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error) {
+	p, err := store.index.Get(lumpid)
+	if err != nil {
+		return nil, err
+	}
+	switch v := p.(type) {
+	case portion.DataPortion:
+		return &v, nil
+	default:
+		return nil, errors.Errorf("only support DataPortion")
+	}
+}
+
+func (store *Storage) Has(lumpid lump.LumpId) bool {
+	_, err := store.index.Get(lumpid)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func (store *Storage) DeleteRecord(lumpid lump.LumpId) error {
+	p, err := store.index.Get(lumpid)
+	if err != nil {
+		return err
+	}
+	switch p.(type) {
+	case portion.DataPortion:
+		if ok := store.index.Delete(lumpid); ok == false {
+			panic("Delete after Get failed, something bad happend")
+		}
+		return store.journalRegion.RecordDelete(store.index, lumpid)
+	default:
+		return errors.Errorf("only support DataPortion")
+	}
+}
+
+func (store *Storage) WriteRecord(lumpid lump.LumpId, dataPortion portion.DataPortion) error {
+	if err := store.journalRegion.RecordPut(store.index, lumpid, dataPortion); err != nil {
+		return err
+	}
+	store.index.InsertDataPortion(lumpid, dataPortion)
+	return nil
+}

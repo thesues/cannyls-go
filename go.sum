@@ -106,6 +106,12 @@ github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
+github.com/thesues/go-judy v0.1.1 h1:r9yAZ2hKlFoFGfQqVUIR0WJ7n9zQ16PwevToTna9OoU=
+github.com/thesues/go-judy v0.1.1/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
+github.com/thesues/go-judy v0.1.2-0.20190912045056-2ebeeffb4185 h1:CJVg2XwqHr8w3eAPMhF7MksCk1Fl5k2tu3HFP27a5p0=
+github.com/thesues/go-judy v0.1.2-0.20190912045056-2ebeeffb4185/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
+github.com/thesues/go-judy v0.1.2 h1:hDHcO+/oeopoCiZOSvNF5+JgXDkCGXPTi2wXi6gIozo=
+github.com/thesues/go-judy v0.1.2/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
 github.com/twinj/uuid v1.0.0 h1:fzz7COZnDrXGTAOHGuUGYd6sG+JMq+AoE7+Jlu0przk=
 github.com/twinj/uuid v1.0.0/go.mod h1:mMgcE1RHFUFqe5AfiwlINXisXfDGro23fWdPUfOMjRY=
 github.com/ugorji/go v1.1.4 h1:j4s+tAvLfL3bZyefP2SEWmhBzmuIlH/eqNuPdFPgngw=

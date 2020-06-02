@@ -18,7 +18,7 @@ require (
 	github.com/prometheus/procfs v0.0.4 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.4.0
-	github.com/thesues/go-judy v0.1.0
+	github.com/thesues/go-judy v0.1.2
 	github.com/twinj/uuid v1.0.0
 	github.com/urfave/cli v1.20.0
 	go.opencensus.io v0.22.1
@@ -26,5 +26,3 @@ require (
 	golang.org/x/sys v0.0.0-20190904154756-749cb33beabd // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
-
-replace github.com/thesues/go-judy v0.1.0 => ./go-judy
