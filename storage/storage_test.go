@@ -443,3 +443,50 @@ func TestMetricHttpSever(t *testing.T) {
 	x.PrometheusHandler.ServeHTTP(rr, req)
 	fmt.Printf("%s", rr.Body.String())
 }
+
+func storageRangeDelete(t *testing.T, reOpen bool, isEmbeded bool) {
+	var err error
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
+	assert.Nil(t, err)
+	defer os.Remove("tmp11.lusf")
+	for i := 0; i < 100; i++ {
+		if isEmbeded {
+			_, err = storage.PutEmbed(lumpidnum(i), []byte("foo"))
+			assert.Nil(t, err)
+		} else {
+			lumpData := dataFromBytes([]byte("foo"))
+			_, err = storage.Put(lumpidnum(i), lumpData)
+			assert.Nil(t, err)
+
+		}
+
+	}
+
+	storage.DeleteRange(lumpidnum(10), lumpidnum(10000))
+
+	if reOpen {
+		storage.Close()
+		storage, err = OpenCannylsStorage("tmp11.lusf")
+		assert.Nil(t, err)
+	}
+
+	for i := 0; i < 10; i++ {
+		data, err := storage.Get(lumpidnum(i))
+		assert.Nil(t, err)
+		assert.Equal(t, []byte("foo"), data)
+	}
+	for i := 11; i < 100; i++ {
+		_, err := storage.Get(lumpidnum(i))
+		assert.Error(t, err)
+	}
+}
+
+func TestStorageRangeDelete(t *testing.T) {
+	storageRangeDelete(t, true, true)
+	storageRangeDelete(t, true, false)
+	storageRangeDelete(t, false, true)
+	storageRangeDelete(t, false, false)
+	storageRangeDelete(t, true, true)
+	storageRangeDelete(t, true, true)
+
+}

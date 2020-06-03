@@ -535,6 +535,31 @@ func (store *Storage) RunSideJobOnce() {
 	store.journalRegion.RunSideJobOnce(store.index)
 }
 
+//half open range: [start, end)
+func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId) error {
+	targets := store.index.ListRange(start, end)
+	//write a DeleteRange record into journal
+	if err := store.journalRegion.RecordDeleteRange(store.index, start, end); err != nil {
+		return err
+	}
+
+	//delete from index, and if it is a data portion, release
+	for _, id := range targets {
+		p, err := store.index.Get(id)
+		if err != nil {
+			return err
+		}
+		store.index.Delete(id)
+		switch v := p.(type) {
+		case portion.DataPortion:
+			store.dataRegion.Release(v)
+		default:
+			//embeded region, no need to release space
+		}
+	}
+	return nil
+}
+
 //added API for raft log and raft apply
 
 func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error) {
