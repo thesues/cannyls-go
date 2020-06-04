@@ -257,6 +257,10 @@ func (store *Storage) MaxId() (lump.LumpId, bool) {
 	return store.index.Max()
 }
 
+func (store *Storage) First(id lump.LumpId) (lump.LumpId, error) {
+	return store.index.First(id)
+}
+
 func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
 	id, have = store.MaxId()
 	if have == false {
@@ -536,7 +540,7 @@ func (store *Storage) RunSideJobOnce() {
 }
 
 //half open range: [start, end)
-func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId) error {
+func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPortion bool) error {
 	targets := store.index.ListRange(start, end)
 	//write a DeleteRange record into journal
 	if err := store.journalRegion.RecordDeleteRange(store.index, start, end); err != nil {
@@ -547,14 +551,16 @@ func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId) error {
 	for _, id := range targets {
 		p, err := store.index.Get(id)
 		if err != nil {
-			return err
+			break
 		}
 		store.index.Delete(id)
-		switch v := p.(type) {
-		case portion.DataPortion:
-			store.dataRegion.Release(v)
-		default:
-			//embeded region, no need to release space
+		if hasDataPortion {
+			switch v := p.(type) {
+			case portion.DataPortion:
+				store.dataRegion.Release(v)
+			default:
+				//embeded region, no need to release space
+			}
 		}
 	}
 	return nil

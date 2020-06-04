@@ -462,7 +462,8 @@ func storageRangeDelete(t *testing.T, reOpen bool, isEmbeded bool) {
 
 	}
 
-	storage.DeleteRange(lumpidnum(10), lumpidnum(10000))
+	err = storage.DeleteRange(lumpidnum(10), lumpidnum(10000), true)
+	assert.Nil(t, err)
 
 	if reOpen {
 		storage.Close()
@@ -475,18 +476,17 @@ func storageRangeDelete(t *testing.T, reOpen bool, isEmbeded bool) {
 		assert.Nil(t, err)
 		assert.Equal(t, []byte("foo"), data)
 	}
-	for i := 11; i < 100; i++ {
+	for i := 11; i < 12; i++ {
 		_, err := storage.Get(lumpidnum(i))
 		assert.Error(t, err)
 	}
 }
 
 func TestStorageRangeDelete(t *testing.T) {
-	storageRangeDelete(t, true, true)
-	storageRangeDelete(t, true, false)
-	storageRangeDelete(t, false, true)
-	storageRangeDelete(t, false, false)
-	storageRangeDelete(t, true, true)
-	storageRangeDelete(t, true, true)
-
+	cases := [2]bool{true, false}
+	for _, i := range cases {
+		for _, j := range cases {
+			storageRangeDelete(t, i, j)
+		}
+	}
 }

@@ -163,6 +163,15 @@ func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.Lum
 	return vec
 }
 
+//return lumpID which is equal or greater then start
+func (index *LumpIndex) First(start lump.LumpId) (lump.LumpId, error) {
+	indexNum, _, ok := index.tree.First(start.U64())
+	if !ok {
+		return lump.EmptyLump(), errors.Wrapf(internalerror.InvalidInput, "failed to get first")
+	}
+	return lump.FromU64(0, indexNum), nil
+}
+
 func (index *LumpIndex) MemoryUsed() uint64 {
 	return index.tree.MemoryUsed()
 }
