@@ -153,6 +153,19 @@ func (index *LumpIndex) DataPortions() []portion.DataPortion {
 	return vec
 }
 
+func (index *LumpIndex) RangeIter(start lump.LumpId, end lump.LumpId, fn func(lump.LumpId, portion.Portion) error) error {
+	indexNum, value, ok := index.tree.First(start.U64())
+	for ok && indexNum < end.U64() {
+		portion, _ := fromValueToPortion(value)
+		err := fn(lump.FromU64(0, indexNum), portion)
+		if err != nil {
+			return err
+		}
+		indexNum, value, ok = index.tree.Next(indexNum)
+	}
+	return nil
+}
+
 func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId, maxSize uint64) []lump.LumpId {
 	vec := make([]lump.LumpId, 0, 1024)
 	indexNum, _, ok := index.tree.First(start.U64())

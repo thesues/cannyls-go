@@ -490,3 +490,23 @@ func TestStorageRangeDelete(t *testing.T) {
 		}
 	}
 }
+
+func TestStorageRangeIter(t *testing.T) {
+	var err error
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
+	assert.Nil(t, err)
+	defer os.Remove("tmp11.lusf")
+	for i := 0; i < 100; i++ {
+		lumpData := dataFromBytes([]byte("foo"))
+		_, err = storage.Put(lumpidnum(i), lumpData)
+		assert.Nil(t, err)
+	}
+
+	i := 50
+	storage.RangeIter(lump.FromU64(0, 50), lump.FromU64(0, 100), func(id lump.LumpId, data []byte) error {
+		assert.Equal(t, id.U64(), uint64(i))
+		assert.Equal(t, []byte("foo"), data)
+		i++
+		return nil
+	}, true)
+}

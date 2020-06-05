@@ -305,6 +305,33 @@ func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.L
 	return store.index.ListRange(start, end, maxSize)
 }
 
+/*
+if isReadData is true, RangeIter will read data from disk
+*/
+func (store *Storage) RangeIter(start, end lump.LumpId, fn func(id lump.LumpId, data []byte) error, isReadData bool) error {
+	return store.index.RangeIter(start, end, func(id lump.LumpId, p portion.Portion) error {
+		if isReadData == false {
+			return fn(id, nil)
+		}
+		switch v := p.(type) {
+		case portion.DataPortion:
+			lumpdata, err := store.dataRegion.Get(v)
+			if err != nil {
+				return err
+			}
+			return fn(id, lumpdata.AsBytes())
+		case portion.JournalPortion:
+			data, err := store.journalRegion.GetEmbededData(v)
+			if err != nil {
+				return err
+			}
+			return fn(id, data)
+		default:
+			panic("never here")
+		}
+	})
+}
+
 // Note the returned size is not accurate size of object, but aligned to block size.
 // For accurate object size, use GetSize, which requires a disk IO.
 func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error) {
@@ -541,29 +568,25 @@ func (store *Storage) RunSideJobOnce() {
 
 //half open range: [start, end)
 func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPortion bool) error {
-	targets := store.index.ListRange(start, end, ^uint64(0))
 	//write a DeleteRange record into journal
 	if err := store.journalRegion.RecordDeleteRange(store.index, start, end); err != nil {
 		return err
 	}
 
-	//delete from index, and if it is a data portion, release
-	for _, id := range targets {
+	return store.index.RangeIter(start, end, func(id lump.LumpId, p portion.Portion) error {
 		p, err := store.index.Get(id)
 		if err != nil {
-			break
+			return err
 		}
 		store.index.Delete(id)
-		if hasDataPortion {
-			switch v := p.(type) {
-			case portion.DataPortion:
-				store.dataRegion.Release(v)
-			default:
-				//embeded region, no need to release space
-			}
+		switch v := p.(type) {
+		case portion.DataPortion:
+			store.dataRegion.Release(v)
 		}
-	}
-	return nil
+
+		return nil
+
+	})
 }
 
 //added API for raft log and raft apply

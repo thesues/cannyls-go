@@ -70,6 +70,31 @@ func TestLumpIndexDelete(t *testing.T) {
 	}
 }
 
+func TestLumpIndexRangeDelete(t *testing.T) {
+	cases := []lump.LumpId{
+		lumpid("1111"),
+		lumpid("2222"),
+		lumpid("3333"),
+		lumpid("4444"),
+		lumpid("5555"),
+	}
+	tree := NewIndex()
+	data := portion.NewJournalPortion(100, 10)
+	for _, c := range cases {
+		tree.InsertJournalPortion(c, data)
+	}
+
+	err := tree.RangeIter(lump.FromU64(0, 0), lump.FromU64(0, ^uint64(0)), func(id lump.LumpId, p portion.Portion) error {
+		tree.Delete(id)
+		return nil
+	})
+	assert.Nil(t, err)
+	for _, c := range cases {
+		_, err = tree.Get(c)
+		assert.Error(t, err)
+	}
+}
+
 //helper
 
 const N int64 = 1000000
