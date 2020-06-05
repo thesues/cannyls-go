@@ -153,12 +153,14 @@ func (index *LumpIndex) DataPortions() []portion.DataPortion {
 	return vec
 }
 
-func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId) []lump.LumpId {
+func (index *LumpIndex) ListRange(start lump.LumpId, end lump.LumpId, maxSize uint64) []lump.LumpId {
 	vec := make([]lump.LumpId, 0, 1024)
 	indexNum, _, ok := index.tree.First(start.U64())
-	for ok && indexNum < end.U64() {
+	var n uint64 = 0
+	for ok && indexNum < end.U64() && n < maxSize {
 		vec = append(vec, lump.FromU64(0, indexNum))
 		indexNum, _, ok = index.tree.Next(indexNum)
+		n += 1
 	}
 	return vec
 }

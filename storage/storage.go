@@ -301,8 +301,8 @@ func (store *Storage) JournalSnapshot() JournalSnapshot {
 	}
 }
 
-func (store *Storage) ListRange(start, end lump.LumpId) []lump.LumpId {
-	return store.index.ListRange(start, end)
+func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.LumpId {
+	return store.index.ListRange(start, end, maxSize)
 }
 
 // Note the returned size is not accurate size of object, but aligned to block size.
@@ -541,7 +541,7 @@ func (store *Storage) RunSideJobOnce() {
 
 //half open range: [start, end)
 func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPortion bool) error {
-	targets := store.index.ListRange(start, end)
+	targets := store.index.ListRange(start, end, ^uint64(0))
 	//write a DeleteRange record into journal
 	if err := store.journalRegion.RecordDeleteRange(store.index, start, end); err != nil {
 		return err

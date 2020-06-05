@@ -59,7 +59,8 @@ func TestLumpIndexDelete(t *testing.T) {
 	assert.Nil(t, p)
 	assert.Error(t, err)
 
-	fmt.Println(tree.ListRange(lumpid("1111"), lumpid("5555")))
+	maxUINT64 := ^uint64(0)
+	fmt.Println(tree.ListRange(lumpid("1111"), lumpid("5555"), maxUINT64))
 	//range delete
 	tree.DeleteRange(lumpid("1111"), lumpid("5555"))
 

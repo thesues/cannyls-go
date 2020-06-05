@@ -112,6 +112,8 @@ github.com/thesues/go-judy v0.1.2-0.20190912045056-2ebeeffb4185 h1:CJVg2XwqHr8w3
 github.com/thesues/go-judy v0.1.2-0.20190912045056-2ebeeffb4185/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
 github.com/thesues/go-judy v0.1.2 h1:hDHcO+/oeopoCiZOSvNF5+JgXDkCGXPTi2wXi6gIozo=
 github.com/thesues/go-judy v0.1.2/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
+github.com/thesues/go-judy v0.1.3 h1:NHTAU4TY+CYvE3pExqtxF4dPC+o4e685o6Z+dC0rUf0=
+github.com/thesues/go-judy v0.1.3/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
 github.com/twinj/uuid v1.0.0 h1:fzz7COZnDrXGTAOHGuUGYd6sG+JMq+AoE7+Jlu0przk=
 github.com/twinj/uuid v1.0.0/go.mod h1:mMgcE1RHFUFqe5AfiwlINXisXfDGro23fWdPUfOMjRY=
 github.com/ugorji/go v1.1.4 h1:j4s+tAvLfL3bZyefP2SEWmhBzmuIlH/eqNuPdFPgngw=
