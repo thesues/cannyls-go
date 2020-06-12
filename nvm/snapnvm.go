@@ -273,8 +273,8 @@ func (bf *BackingFile) Close() {
 	bf.file.Close()
 }
 
-func (bf *BackingFile) Sync() {
-	bf.file.Sync()
+func (bf *BackingFile) Sync() error {
+	return bf.file.Sync()
 }
 
 func (bf *BackingFile) Delete() {
@@ -586,8 +586,9 @@ func NewSnapshotNVM(originFile *FileNVM) (*SnapNVM, error) {
 	fileDirectory := filepath.Dir(originFile.path)
 	var myBackFile *BackingFile = nil
 	///a/b/c/d/EXXX.lusf => EXXX
-	n := len(originFile.path)
-	prefix := filepath.Base(originFile.path)[0 : n-5]
+	//../../../ASDF.lusf => ASDF
+	baseName := filepath.Base(originFile.path)
+	prefix := baseName[0 : len(baseName)-5]
 	pattern := fmt.Sprintf("%s/%s_*_lusf.snapshot", fileDirectory, prefix)
 	//fmt.Println(pattern)
 	matches, err := filepath.Glob(pattern)
@@ -762,6 +763,13 @@ func (self *SnapNVM) RawSize() int64 {
 	return self.rawSnapNVM.originFile.RawSize()
 }
 
-func (self *SnapNVM) Sync() error {
-	return self.originFile.Sync()
+func (self *SnapNVM) Sync() (err error) {
+	if err = self.rawSnapNVM.originFile.Sync(); err != nil {
+		return
+	}
+
+	if self.rawSnapNVM.myBackfile != nil {
+		err = self.rawSnapNVM.myBackfile.Sync()
+	}
+	return
 }
