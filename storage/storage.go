@@ -65,7 +65,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	index := lumpindex.NewIndex()
 	journalNVM, dataNVM := header.SplitRegion(snapNVM)
 
-	journalRegion, err := journal.OpenJournalRegion(journalNVM)
+	journalRegion, err := journal.OpenJournalRegion(journalNVM, false)
 	if err != nil {
 		return nil, err
 	}
