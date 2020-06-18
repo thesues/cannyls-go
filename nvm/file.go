@@ -101,7 +101,7 @@ func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 		return nil, nil, internalerror.InvalidInput
 	}
 
-	if parsedFile, err = os.OpenFile(path, os.O_RDWR, 07555); err != nil {
+	if parsedFile, err = os.OpenFile(path, os.O_RDWR, 0755); err != nil {
 		return nil, nil, err
 	}
 	//read the first sector
@@ -135,7 +135,7 @@ func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 }
 
 func (self *FileNVM) Sync() error {
-	return self.file.Sync()
+	return dataSync(self.file)
 }
 
 func (self *FileNVM) Position() uint64 {

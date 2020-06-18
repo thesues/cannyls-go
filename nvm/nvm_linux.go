@@ -3,11 +3,11 @@
 package nvm
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
-	"fmt"
 )
 
 // OpenFile is a modified version of os.OpenFile which sets O_DIRECT
@@ -29,6 +29,10 @@ func fcntl(fd int, cmd int, arg int) (val int, err error) {
 	return
 }
 
+func dataSync(file *os.File) error {
+	fd := file.Fd()
+	return syscall.Fdatasync(int(fd))
+}
 
 func fallocate(file *os.File, preallocate int64) error {
 	return syscall.Fallocate(int(file.Fd()), 1, 0, preallocate)

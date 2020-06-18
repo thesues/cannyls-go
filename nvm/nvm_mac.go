@@ -66,7 +66,11 @@ func isExclusiveLock(path string, val int) bool {
 	return (val & 0x4000) != 0
 }
 
-func fallocate(file *os.File, preallocate int64) error{
+func dataSync(file *os.File) error {
+	return file.Sync()
+}
+
+func fallocate(file *os.File, preallocate int64) error {
 	//not implemented!!
 	return nil
 }
