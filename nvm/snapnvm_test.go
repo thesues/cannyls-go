@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thesues/cannyls-go/util"
 )
 
 func TestBackingFileCreate(t *testing.T) {
@@ -93,7 +95,7 @@ func TestSimpleWriteSnapFile(t *testing.T) {
 	snap_nvm, err := NewSnapshotNVM(nvm)
 	assert.Nil(t, err)
 
-	err = snap_nvm.CreateSnapshotIfNeeded()
+	err = snap_nvm.createSnapshotIfNeeded()
 	assert.Nil(t, err)
 	defer os.Remove(snap_nvm.myBackfile.GetFileName())
 
@@ -156,7 +158,8 @@ func TestOverWriteSnapFile(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.Remove(snap_nvm.myBackfile.GetFileName())
 	var rdata [1024]byte
-	snapshotReader.Seek(offset, io.SeekStart)
+	_, err = snapshotReader.Seek(offset, io.SeekStart)
+	assert.Nil(t, err)
 
 	//partial read
 	n, err = snapshotReader.Read(rdata[:])
@@ -164,29 +167,30 @@ func TestOverWriteSnapFile(t *testing.T) {
 	assert.Equal(t, 512, n)
 	assert.Equal(t, arrayWithValueSize(512, 97), rdata[0:512])
 
-	//full read
-	snapshotReader.Seek(offset, io.SeekStart)
-	n, err = io.ReadFull(snapshotReader, rdata[:])
-	assert.Nil(t, err)
-	assert.Equal(t, 1024, n)
-	assert.Equal(t, arrayWithValueSize(1024, 97), rdata[:])
+	/*
+		//full read
+		snapshotReader.Seek(offset, io.SeekStart)
+		n, err = io.ReadFull(snapshotReader, rdata[:])
+		assert.Nil(t, err)
+		assert.Equal(t, 1024, n)
+		assert.Equal(t, arrayWithValueSize(1024, 97), rdata[:])
 
-	//overwrite
-	offset = (32 << 20)
-	wdata = arrayWithValueSize(512, 122)
-	_, err = snap_nvm.Seek(offset, io.SeekStart)
-	assert.Nil(t, err)
-	n, err = snap_nvm.Write(align(wdata))
-	assert.Nil(t, err)
-	assert.Equal(t, 512, n)
+		//overwrite
+		offset = (32 << 20)
+		wdata = arrayWithValueSize(512, 122)
+		_, err = snap_nvm.Seek(offset, io.SeekStart)
+		assert.Nil(t, err)
+		n, err = snap_nvm.Write(align(wdata))
+		assert.Nil(t, err)
+		assert.Equal(t, 512, n)
 
-	//read snapshot
-	snapshotReader.Seek(offset, io.SeekStart)
-	n, err = io.ReadFull(snapshotReader, rdata[0:100])
-	assert.Nil(t, err)
-	assert.Equal(t, 100, n)
-	assert.Equal(t, arrayWithValueSize(100, 97), rdata[0:100])
-
+		//read snapshot
+		snapshotReader.Seek(offset, io.SeekStart)
+		n, err = io.ReadFull(snapshotReader, rdata[0:100])
+		assert.Nil(t, err)
+		assert.Equal(t, 100, n)
+		assert.Equal(t, arrayWithValueSize(100, 97), rdata[0:100])
+	*/
 	snap_nvm.Close()
 
 }
@@ -216,7 +220,7 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 	journalNVM.Write(align(buf1))
 	dataNVM.Write(align(buf2))
 
-	snapFile.CreateSnapshotIfNeeded()
+	snapFile.createSnapshotIfNeeded()
 	defer os.Remove(snapFile.myBackfile.GetFileName())
 
 	snapFile.Close()
@@ -346,4 +350,58 @@ func TestSnapDelete(t *testing.T) {
 	_, err = snapNVM.GetSnapshotReader()
 	assert.Nil(t, err)
 	defer snapNVM.DeleteSnapshot()
+}
+
+func TestSnapThreadSafe(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	assert.Nil(t, err)
+	defer os.Remove("foo-test.lusf")
+
+	snapNVM, err := NewSnapshotNVM(nvm)
+	assert.Nil(t, err)
+	//snapNVM.Split()
+	stopper := util.NewStopper()
+	buf := arrayWithValueSize(512, 101)
+	_, err = snapNVM.Write(buf)
+	assert.Nil(t, err)
+
+	snapReader, err := snapNVM.GetSnapshotReader()
+	assert.Nil(t, err)
+	defer snapNVM.DeleteSnapshot()
+
+	//1 write thread
+	stopper.RunWorker(func() {
+		for i := 0; i < 10; i++ {
+			_, err := snapNVM.Write(buf)
+			assert.Nil(t, err)
+			time.Sleep(30 * time.Millisecond)
+		}
+	})
+	//2 read thread
+	foo := func() {
+		for i := 0; i < 10; i++ {
+			rbuf := alignedWithSize(512)
+			_, err := snapNVM.ReadAt(rbuf, int64(i*256))
+			assert.Nil(t, err)
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	for i := 0; i < 8; i++ {
+		stopper.RunWorker(func() {
+			foo()
+		})
+	}
+	//1 snapshot read
+	snapBuf := make([]byte, 31)
+	for {
+		n, err := snapReader.Read(snapBuf)
+		if err != nil && err != io.EOF {
+			panic(err.Error())
+		}
+		assert.Equal(t, arrayWithValueSize(n, 101), snapBuf[:n])
+		if err != nil {
+			break
+		}
+	}
+	stopper.Wait()
 }

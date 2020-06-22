@@ -203,6 +203,20 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 	return offset, nil
 }
 
+//read,write threadSafe
+func (nvm *FileNVM) ReadAt(buf []byte, off int64) (n int, err error) {
+	maxLen := nvm.Capacity() - uint64(off)
+	if maxLen == 0 {
+		return 0, io.EOF
+	}
+	bufLen := uint64(len(buf))
+	if !block.Min().IsAligned(uint64(bufLen)) {
+		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in read", bufLen)
+	}
+	rlen := util.Min(maxLen, bufLen)
+	return nvm.file.ReadAt(buf[:rlen], int64(nvm.viewStart)+off)
+}
+
 func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	maxLen := nvm.Capacity() - nvm.Position()
 

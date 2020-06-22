@@ -107,6 +107,15 @@ func (memory *MemoryNVM) BlockSize() block.BlockSize {
 	return block.Min()
 }
 
+//Thread-Safe
+func (memory *MemoryNVM) ReadAt(p []byte, off int64) (n int, err error) {
+	if off >= int64(len(memory.vec)) {
+		return 0, io.EOF
+	}
+	n = copy(p, memory.vec[memory.position:])
+	return n, nil
+}
+
 //for local test
 func (memory *MemoryNVM) AsBytes() []byte {
 	return memory.vec
