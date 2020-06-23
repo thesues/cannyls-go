@@ -380,7 +380,7 @@ func TestSnapThreadSafe(t *testing.T) {
 
 	stopper := util.NewStopper()
 	buf := arrayWithValueSize(512*10, 101)
-	_, err = snapNVM.Write(buf)
+	_, err = snapNVM.Write(align(buf))
 	assert.Nil(t, err)
 
 	snapReader, err := snapNVM.GetSnapshotReader()
@@ -390,7 +390,7 @@ func TestSnapThreadSafe(t *testing.T) {
 	//1 write thread
 	stopper.RunWorker(func() {
 		for i := 0; i < 20; i++ {
-			_, err := snapNVM.Write(buf)
+			_, err := snapNVM.Write(align(buf))
 			assert.Nil(t, err)
 			time.Sleep(30 * time.Millisecond)
 		}

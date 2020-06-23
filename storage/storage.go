@@ -34,7 +34,7 @@ const (
 )
 
 type Storage struct {
-	i                     sync.Mutex
+	i                     sync.RWMutex
 	jr                    sync.Mutex
 	storageHeader         *nvm.StorageHeader
 	dataRegion            *DataRegion
@@ -218,8 +218,8 @@ func (store *Storage) SetAutomaticGcMode(gc bool) {
 }
 
 func (store *Storage) List() []lump.LumpId {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	return store.index.List()
 }
 
@@ -261,26 +261,26 @@ func (store *Storage) Usage() StorageUsage {
 }
 
 func (store *Storage) MinId() (lump.LumpId, bool) {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	return store.index.Min()
 }
 
 func (store *Storage) MaxId() (lump.LumpId, bool) {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	return store.index.Max()
 }
 
 func (store *Storage) First(id lump.LumpId) (lump.LumpId, error) {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	return store.index.First(id)
 }
 
 func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	id, have = store.index.Max()
 	if have == false {
 		//the store is empty, use 0 as the first id
@@ -327,8 +327,8 @@ func (store *Storage) JournalSnapshot() JournalSnapshot {
 }
 
 func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.LumpId {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	return store.index.ListRange(start, end, maxSize)
 }
 
@@ -364,8 +364,8 @@ func (store *Storage) RangeIter(start, end lump.LumpId, fn func(id lump.LumpId, 
 // Note the returned size is not accurate size of object, but aligned to block size.
 // For accurate object size, use GetSize, which requires a disk IO.
 func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error) {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return 0, err
@@ -375,9 +375,9 @@ func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error)
 
 // Get accurate size of object, require a disk IO
 func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
-	store.i.Lock()
+	store.i.RLock()
 	p, err := store.index.Get(lumpid)
-	store.i.Unlock()
+	store.i.RUnlock()
 	if err != nil {
 		return 0, err
 	}
@@ -398,9 +398,9 @@ func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
 }
 
 func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
-	store.i.Lock()
+	store.i.RLock()
 	p, err := store.index.Get(lumpid)
-	store.i.Unlock()
+	store.i.RUnlock()
 	if err != nil {
 		return nil, err
 	}
@@ -426,9 +426,9 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 }
 
 func (store *Storage) GetWithOffset(lumpId lump.LumpId, startOffset uint32, length uint32) ([]byte, error) {
-	store.i.Lock()
+	store.i.RLock()
 	p, err := store.index.Get(lumpId)
-	store.i.Unlock()
+	store.i.RUnlock()
 	if err != nil {
 		return nil, err
 	}
@@ -502,9 +502,9 @@ func paddingWithZero(payload []byte, startOffset, reservation uint32) []byte {
 func (store *Storage) PutWithOffset(lumpid lump.LumpId, lumpdata lump.LumpData,
 	startOffset uint32, reservation uint32) (err error) {
 
-	store.i.Lock()
+	store.i.RLock()
 	p, err := store.index.Get(lumpid)
-	store.i.Unlock()
+	store.i.RUnlock()
 	payload := lumpdata.AsBytes()
 	if err != nil {
 		// Only one error possible, which is "object could not be found",
@@ -672,8 +672,8 @@ func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPor
 
 //added API for raft log and raft apply
 func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error) {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return nil, err
@@ -687,8 +687,8 @@ func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error
 }
 
 func (store *Storage) Has(lumpid lump.LumpId) bool {
-	store.i.Lock()
-	defer store.i.Unlock()
+	store.i.RLock()
+	defer store.i.RUnlock()
 	_, err := store.index.Get(lumpid)
 	if err != nil {
 		return false
