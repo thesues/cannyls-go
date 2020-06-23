@@ -34,17 +34,7 @@ func favicon(w http.ResponseWriter, r *http.Request) {
 
 //Based on https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
 
-//getalloc is not thread-safe.
-type GetAllocRequest struct {
-	resultChan chan []float64
-}
-
 var backupRuning bool = false
-
-type BackupRequest struct {
-	onlyCreateSnapshot bool
-	resultChan         chan bool
-}
 
 //put
 type PutRequest struct {
@@ -56,19 +46,9 @@ type PutRequest struct {
 }
 
 type PutResult struct {
-	id  uint64
-	err error
-}
-
-type GetResult struct {
-	data []byte
-	err  error
-}
-
-//delete
-type DeleteRequest struct {
-	ctx        context.Context
-	resultChan chan GetResult
+	id         uint64
+	err        error
+	resultChan chan PutResult
 }
 
 var (
@@ -81,79 +61,7 @@ func chooseID(store *storage.Storage) (lump.LumpId, bool) {
 	return store.GenerateEmptyId()
 }
 
-func handleBackupRequest(store *storage.Storage, request BackupRequest) {
-	if request.onlyCreateSnapshot {
-		//lock
-		err := store.CreateSnapshot()
-		//unlock
-		if err != nil {
-			request.resultChan <- false
-			return
-		}
-		request.resultChan <- true
-		return
-	}
-
-	if backupRuning {
-		request.resultChan <- false
-		return
-	}
-
-	//lock()
-	reader, err := store.GetSnapshotReader()
-	//unlock()
-	if err != nil {
-		request.resultChan <- false
-		return
-	}
-	backupStopper := util.NewStopper()
-
-	backupStopper.RunWorker(func() {
-		//open backup file, name is start time
-		defer func() {
-			backupRuning = false
-		}()
-		fileName := time.Now().Format(time.RFC3339) + "_backup.lusf"
-		backfile, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
-		if err != nil {
-			return
-		}
-		var buf [512 << 10]byte
-		for {
-			select {
-			case <-backupStopper.ShouldStop():
-				backfile.Close()
-				return
-			case <-time.After(100 * time.Millisecond):
-				//lock
-
-				n, err := reader.Read(buf[:])
-				fmt.Printf("copy out data %d, %+v\n", n, err)
-				//unlock
-				if err != nil && err != io.EOF {
-					return
-				}
-				if n == 0 {
-					store.DeleteSnapshot()
-					backfile.Close()
-					return
-				}
-				n, err = backfile.Write(buf[0:n])
-				if err != nil {
-					return
-				}
-			}
-		}
-	})
-	request.resultChan <- true
-
-}
-
-func handleAllocRequest(store *storage.Storage, request GetAllocRequest) {
-	vec := store.GetAllocationStatus()
-	request.resultChan <- vec
-}
-
+/*
 func handlePutRequest(store *storage.Storage, request PutRequest) {
 	var response PutResult
 
@@ -171,7 +79,7 @@ func handlePutRequest(store *storage.Storage, request PutRequest) {
 	if request.isAutoId {
 		id, have = chooseID(store)
 		if !have {
-			request.resultChan <- PutResult{id.U64(), NoLumpIdSpaceError}
+			request.resultChan <- PutResult{id.U64(), NoLumpIdSpaceError, }
 			return
 		}
 	}
@@ -191,11 +99,12 @@ func handlePutRequest(store *storage.Storage, request PutRequest) {
 	}
 
 }
+*/
 
 func ServeStore(store *storage.Storage) {
 	fmt.Printf("start http server\n")
 
-	reqeustChan := make(chan interface{}, 10)
+	reqeustChan := make(chan PutRequest, 20)
 
 	//cannyls storage routine
 	cannylsStopper := util.NewStopper()
@@ -206,15 +115,47 @@ func ServeStore(store *storage.Storage) {
 			case <-cannylsStopper.ShouldStop():
 				store.Close()
 				return
-			case request := <-reqeustChan:
-				switch request.(type) {
-				case PutRequest:
-					handlePutRequest(store, request.(PutRequest))
-				case GetAllocRequest:
-					handleAllocRequest(store, request.(GetAllocRequest))
-				case BackupRequest:
-					handleBackupRequest(store, request.(BackupRequest))
+			case r := <-reqeustChan:
+				var requests []PutRequest
+			slurp_loop:
+				for {
+					requests = append(requests, r)
+					select {
+					case r = <-reqeustChan:
+					default:
+						break slurp_loop
+					}
 				}
+
+				var results []PutResult
+				fmt.Printf("len of slurp is %d\n", len(requests))
+				for _, req := range requests {
+					var id lump.LumpId = lump.FromU64(0, req.id)
+					var have bool
+					if req.isAutoId {
+						id, have = chooseID(store)
+						if !have {
+							req.resultChan <- PutResult{id.U64(), NoLumpIdSpaceError, nil}
+							return
+						}
+					}
+
+					_, err := store.Put(id, req.data)
+
+					var result PutResult
+					result.id = id.U64()
+					if err != nil {
+						result.err = err
+					}
+					result.resultChan = req.resultChan
+					results = append(results, result)
+				}
+
+				store.Sync()
+				for _, result := range results {
+					result.resultChan <- result
+				}
+
 			case <-time.After(3 * time.Second):
 				store.RunSideJobOnce()
 			}
@@ -254,12 +195,9 @@ func ServeStore(store *storage.Storage) {
 	})
 
 	r.Use(static.Serve("/static", static.LocalFile("./static", false)))
-	r.GET("/getalloc/", func(c *gin.Context) {
-		//I am lazy, no timeout here
-		resultChan := make(chan []float64)
-		reqeustChan <- GetAllocRequest{resultChan: resultChan}
 
-		out := <-resultChan
+	r.GET("/getalloc/", func(c *gin.Context) {
+		out := store.GetAllocationStatus()
 		c.JSON(200, out)
 	})
 
@@ -305,26 +243,58 @@ func ServeStore(store *storage.Storage) {
 			return
 		}
 
-		request := BackupRequest{
-			onlyCreateSnapshot: onlyCreateSnapshot,
-			resultChan:         make(chan bool),
-		}
-		ctx := context.Background()
-		reqeustChan <- request
-
-		select {
-		case success := <-request.resultChan:
-			if !success {
-				c.String(400, "no")
-				return
-			} else {
-				c.String(200, "created")
+		if onlyCreateSnapshot {
+			err := store.CreateSnapshot()
+			if err != nil {
+				c.String(500, err.Error())
 				return
 			}
-		case <-ctx.Done():
-			c.String(400, "TIMEOUT")
+			c.Status(200)
+			return
 		}
 
+		if backupRuning {
+			c.String(http.StatusCreated, "backup is running")
+			return
+		}
+
+		backupStopper := util.NewStopper()
+		backupStopper.RunWorker(func() {
+			//open backup file, name is start time
+			defer func() {
+				backupRuning = false
+			}()
+
+			reader, err := store.GetSnapshotReader()
+			fileName := time.Now().Format(time.RFC3339) + "_backup.lusf"
+			backfile, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+			if err != nil {
+				return
+			}
+			var buf [512 << 10]byte
+			for {
+				select {
+				case <-backupStopper.ShouldStop():
+					backfile.Close()
+					return
+				case <-time.After(100 * time.Millisecond):
+					n, err := reader.Read(buf[:])
+					fmt.Printf("copy out data %d, %+v\n", n, err)
+					if err != nil && err != io.EOF {
+						return
+					}
+					if n == 0 {
+						store.DeleteSnapshot()
+						backfile.Close()
+						return
+					}
+					n, err = backfile.Write(buf[0:n])
+					if err != nil {
+						return
+					}
+				}
+			}
+		})
 	})
 
 	r.POST("/put/*id", func(c *gin.Context) {
@@ -372,7 +342,6 @@ func ServeStore(store *storage.Storage) {
 
 		select {
 		case out := <-request.resultChan:
-			fmt.Println(out)
 			if out.err != nil {
 				c.String(400, out.err.Error())
 			} else {

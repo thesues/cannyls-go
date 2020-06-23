@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,7 @@ import (
 	"github.com/thesues/cannyls-go/lump"
 	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/storage/journal"
+	"github.com/thesues/cannyls-go/util"
 )
 
 var _ = fmt.Print
@@ -515,3 +517,129 @@ func TestStorageRangeIter(t *testing.T) {
 	}, true)
 }
 */
+func TestStorageThreadSafe(t *testing.T) {
+	var err error
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.2)
+	assert.Nil(t, err)
+	defer os.Remove("tmp11.lusf")
+
+	done := make([]bool, 100)
+	mutex := new(sync.RWMutex)
+	cond := sync.NewCond(mutex)
+
+	setter := func(i int) {
+		buf := []byte(fmt.Sprintf("Test%d", i))
+
+		//fmt.Printf("set %d\n", i)
+		if i%5 == 0 {
+			storage.PutEmbed(lumpidnum(i), buf)
+		} else {
+			storage.Put(lumpidnum(i), dataFromBytes(buf))
+		}
+		mutex.Lock()
+		defer mutex.Unlock()
+		done[i] = true
+		cond.Broadcast()
+	}
+
+	getter := func(i int) {
+		buf := []byte(fmt.Sprintf("Test%d", i))
+		mutex.Lock()
+		defer mutex.Unlock()
+		for done[i] == false {
+			cond.Wait()
+		}
+		//fmt.Printf("get %d\n", i)
+		data, err := storage.Get(lumpidnum(i))
+		assert.Equal(t, buf, data)
+		assert.Nil(t, err)
+	}
+
+	stopper := util.NewStopper()
+	for i := 0; i < 100; i++ {
+		index := i
+		stopper.RunWorker(func() {
+			setter(index)
+		})
+
+		stopper.RunWorker(func() {
+			getter(index)
+		})
+
+	}
+	stopper.Wait()
+
+}
+
+func BenchmarkStoragePutDataMultiThread(b *testing.B) {
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	defer os.Remove("bench.lusf")
+	for i := 0; i < b.N; i++ {
+		stopper := util.NewStopper()
+		for j := 0; j < 100; j++ {
+			index := j
+			stopper.RunWorker(func() {
+				d := zeroedData(42)
+				storage.Put(lumpidnum(index), d)
+				d.Inner.Resize(42)
+			})
+		}
+		stopper.Wait()
+	}
+}
+
+func BenchmarkStoragePutDataSingleThread(b *testing.B) {
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	defer os.Remove("bench.lusf")
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 100; j++ {
+			index := j
+			d := zeroedData(42)
+			storage.Put(lumpidnum(index), d)
+			d.Inner.Resize(42)
+		}
+	}
+}
+
+func BenchmarkStoragGetDataSingleThread(b *testing.B) {
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	defer os.Remove("bench.lusf")
+	//setup data
+	for j := 0; j < 100; j++ {
+		index := j
+		d := zeroedData(42)
+		storage.Put(lumpidnum(index), d)
+		d.Inner.Resize(42)
+	}
+	//read data
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 100; j++ {
+			index := j
+			storage.Get(lumpidnum(index))
+		}
+	}
+}
+
+func BenchmarkStoragGetDataMultiThread(b *testing.B) {
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	defer os.Remove("bench.lusf")
+	//setup data
+	for j := 0; j < 100; j++ {
+		index := j
+		d := zeroedData(42)
+		storage.Put(lumpidnum(index), d)
+		d.Inner.Resize(42)
+	}
+	//read data
+	for i := 0; i < b.N; i++ {
+		stopper := util.NewStopper()
+		for j := 0; j < 100; j++ {
+			index := j
+			stopper.RunWorker(func() {
+				storage.Get(lumpidnum(index))
+			})
+		}
+		stopper.Wait()
+
+	}
+}

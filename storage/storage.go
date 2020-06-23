@@ -546,8 +546,10 @@ func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, size uint32, err
 }
 
 func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, uint32, error) {
+
 	store.i.Lock()
 	defer store.i.Unlock()
+
 	p, err := store.index.Get(lumpid)
 
 	//if not exist

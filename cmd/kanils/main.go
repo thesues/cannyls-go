@@ -219,7 +219,7 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 		}
 
 		if sync {
-			store.JournalSync()
+			store.Sync()
 		}
 	}
 
