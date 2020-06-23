@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-contrib/static"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
@@ -163,6 +164,8 @@ func ServeStore(store *storage.Storage) {
 	})
 
 	r := gin.Default()
+
+	pprof.Register(r)
 
 	r.GET("/usage", func(c *gin.Context) {
 		c.JSON(200, store.Usage())
