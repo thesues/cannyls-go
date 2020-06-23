@@ -352,6 +352,24 @@ func TestSnapDelete(t *testing.T) {
 	defer snapNVM.DeleteSnapshot()
 }
 
+func TestSnapNVMReadAtWriteAt(t *testing.T) {
+	file, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio.lusf")
+
+	nvm, err := NewSnapshotNVM(file)
+	wbuf := alignedWithSize(512)
+	wbuf[0] = 10
+	wbuf[34] = 9
+	wbuf[500] = 8
+	rbuf := alignedWithSize(512)
+	_, err = nvm.WriteAt(wbuf, 512)
+	assert.Nil(t, err)
+	_, err = nvm.ReadAt(rbuf, 512)
+	assert.Nil(t, err)
+	assert.Equal(t, wbuf, rbuf)
+}
+
 func TestSnapThreadSafe(t *testing.T) {
 	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
 	assert.Nil(t, err)
@@ -359,9 +377,9 @@ func TestSnapThreadSafe(t *testing.T) {
 
 	snapNVM, err := NewSnapshotNVM(nvm)
 	assert.Nil(t, err)
-	//snapNVM.Split()
+
 	stopper := util.NewStopper()
-	buf := arrayWithValueSize(512, 101)
+	buf := arrayWithValueSize(512*10, 101)
 	_, err = snapNVM.Write(buf)
 	assert.Nil(t, err)
 
@@ -371,17 +389,17 @@ func TestSnapThreadSafe(t *testing.T) {
 
 	//1 write thread
 	stopper.RunWorker(func() {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 20; i++ {
 			_, err := snapNVM.Write(buf)
 			assert.Nil(t, err)
 			time.Sleep(30 * time.Millisecond)
 		}
 	})
-	//2 read thread
+	//8 read thread
 	foo := func() {
 		for i := 0; i < 10; i++ {
 			rbuf := alignedWithSize(512)
-			_, err := snapNVM.ReadAt(rbuf, int64(i*256))
+			_, err := snapNVM.ReadAt(rbuf, int64(i*512))
 			assert.Nil(t, err)
 			time.Sleep(20 * time.Millisecond)
 		}

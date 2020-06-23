@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -33,6 +34,8 @@ const (
 )
 
 type Storage struct {
+	i                     sync.Mutex
+	jr                    sync.Mutex
 	storageHeader         *nvm.StorageHeader
 	dataRegion            *DataRegion
 	journalRegion         *journal.JournalRegion
@@ -215,20 +218,28 @@ func (store *Storage) SetAutomaticGcMode(gc bool) {
 }
 
 func (store *Storage) List() []lump.LumpId {
+	store.i.Lock()
+	defer store.i.Unlock()
 	return store.index.List()
 }
 
 func (store *Storage) CreateSnapshot() error {
-	store.JournalSync()
+	store.jr.Lock()
+	defer store.jr.Unlock()
+	store.journalSync()
 	return store.innerNVM.CreateSnapshotIfNeeded()
 }
 
 func (store *Storage) DeleteSnapshot() error {
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	return store.innerNVM.DeleteSnapshot()
 }
 
 func (store *Storage) GetSnapshotReader() (*nvm.SnapshotReader, error) {
-	store.JournalSync()
+	store.jr.Lock()
+	defer store.jr.Unlock()
+	store.journalSync()
 	reader, err := store.innerNVM.GetSnapshotReader()
 	if err != nil {
 		return nil, errors.Errorf("failed to get Snapshot reader %+v", err)
@@ -250,19 +261,27 @@ func (store *Storage) Usage() StorageUsage {
 }
 
 func (store *Storage) MinId() (lump.LumpId, bool) {
+	store.i.Lock()
+	defer store.i.Unlock()
 	return store.index.Min()
 }
 
 func (store *Storage) MaxId() (lump.LumpId, bool) {
+	store.i.Lock()
+	defer store.i.Unlock()
 	return store.index.Max()
 }
 
 func (store *Storage) First(id lump.LumpId) (lump.LumpId, error) {
+	store.i.Lock()
+	defer store.i.Unlock()
 	return store.index.First(id)
 }
 
 func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
-	id, have = store.MaxId()
+	store.i.Lock()
+	defer store.i.Unlock()
+	id, have = store.index.Max()
 	if have == false {
 		//the store is empty, use 0 as the first id
 		id = lump.FromU64(0, 0)
@@ -281,6 +300,10 @@ func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
 }
 
 func (store *Storage) JournalGC() {
+	store.i.Lock()
+	defer store.i.Unlock()
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	store.journalRegion.GcAllEntries(store.index)
 }
 
@@ -292,6 +315,8 @@ type JournalSnapshot struct {
 }
 
 func (store *Storage) JournalSnapshot() JournalSnapshot {
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	unreleasedhead, head, tail, entries := store.journalRegion.JournalEntries()
 	return JournalSnapshot{
 		UnreleasedHead: unreleasedhead,
@@ -302,12 +327,15 @@ func (store *Storage) JournalSnapshot() JournalSnapshot {
 }
 
 func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.LumpId {
+	store.i.Lock()
+	defer store.i.Unlock()
 	return store.index.ListRange(start, end, maxSize)
 }
 
 /*
 if isReadData is true, RangeIter will read data from disk
 */
+/*
 func (store *Storage) RangeIter(start, end lump.LumpId, fn func(id lump.LumpId, data []byte) error, isReadData bool) error {
 	return store.index.RangeIter(start, end, func(id lump.LumpId, p portion.Portion) error {
 		if isReadData == false {
@@ -331,10 +359,13 @@ func (store *Storage) RangeIter(start, end lump.LumpId, fn func(id lump.LumpId, 
 		}
 	})
 }
+*/
 
 // Note the returned size is not accurate size of object, but aligned to block size.
 // For accurate object size, use GetSize, which requires a disk IO.
 func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error) {
+	store.i.Lock()
+	defer store.i.Unlock()
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return 0, err
@@ -344,7 +375,9 @@ func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error)
 
 // Get accurate size of object, require a disk IO
 func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
+	store.i.Lock()
 	p, err := store.index.Get(lumpid)
+	store.i.Unlock()
 	if err != nil {
 		return 0, err
 	}
@@ -352,7 +385,9 @@ func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
 	case portion.DataPortion:
 		return store.dataRegion.GetSize(v)
 	case portion.JournalPortion:
+		store.jr.Lock()
 		data, err := store.journalRegion.GetEmbededData(v)
+		store.jr.Unlock()
 		if err != nil {
 			return 0, err
 		}
@@ -363,10 +398,13 @@ func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
 }
 
 func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
+	store.i.Lock()
 	p, err := store.index.Get(lumpid)
+	store.i.Unlock()
 	if err != nil {
 		return nil, err
 	}
+
 	switch v := p.(type) {
 	case portion.DataPortion:
 		lumpdata, err := store.dataRegion.Get(v)
@@ -375,7 +413,9 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 		}
 		return lumpdata.AsBytes(), nil
 	case portion.JournalPortion:
+		store.jr.Lock()
 		data, err := store.journalRegion.GetEmbededData(v)
+		store.jr.Unlock()
 		if err != nil {
 			return nil, err
 		}
@@ -386,7 +426,9 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 }
 
 func (store *Storage) GetWithOffset(lumpId lump.LumpId, startOffset uint32, length uint32) ([]byte, error) {
+	store.i.Lock()
 	p, err := store.index.Get(lumpId)
+	store.i.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +436,9 @@ func (store *Storage) GetWithOffset(lumpId lump.LumpId, startOffset uint32, leng
 	case portion.DataPortion:
 		return store.dataRegion.GetWithOffset(v, startOffset, length)
 	case portion.JournalPortion:
+		store.jr.Lock()
 		data, err := store.journalRegion.GetEmbededData(v)
+		store.jr.Unlock()
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +454,15 @@ func (store *Storage) put(lumpid lump.LumpId, lumpdata lump.LumpData) (err error
 	if err != nil {
 		return
 	}
-	if err = store.journalRegion.RecordPut(store.index, lumpid, dataPortion); err != nil {
+
+	store.i.Lock()
+	defer store.i.Unlock()
+
+	store.jr.Lock()
+	err = store.journalRegion.RecordPut(store.index, lumpid, dataPortion)
+	store.jr.Unlock()
+
+	if err != nil {
 		// revert the dataPortion
 		store.dataRegion.Release(dataPortion)
 		return
@@ -421,7 +473,6 @@ func (store *Storage) put(lumpid lump.LumpId, lumpdata lump.LumpData) (err error
 }
 
 func (store *Storage) Put(lumpid lump.LumpId, lumpdata lump.LumpData) (updated bool, err error) {
-
 	err = nil
 	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
 		return updated, err
@@ -451,7 +502,9 @@ func paddingWithZero(payload []byte, startOffset, reservation uint32) []byte {
 func (store *Storage) PutWithOffset(lumpid lump.LumpId, lumpdata lump.LumpData,
 	startOffset uint32, reservation uint32) (err error) {
 
+	store.i.Lock()
 	p, err := store.index.Get(lumpid)
+	store.i.Unlock()
 	payload := lumpdata.AsBytes()
 	if err != nil {
 		// Only one error possible, which is "object could not be found",
@@ -479,6 +532,10 @@ func (store *Storage) PutEmbed(lumpid lump.LumpId, data []byte) (updated bool, e
 	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
 		return
 	}
+	store.i.Lock()
+	defer store.i.Unlock()
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	err = store.journalRegion.RecordEmbed(store.index, lumpid, data)
 	return
 }
@@ -489,6 +546,8 @@ func (store *Storage) Delete(lumpid lump.LumpId) (updated bool, size uint32, err
 }
 
 func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, uint32, error) {
+	store.i.Lock()
+	defer store.i.Unlock()
 	p, err := store.index.Get(lumpid)
 
 	//if not exist
@@ -502,7 +561,9 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, ui
 	}
 
 	if doRecord {
+		store.jr.Lock()
 		store.journalRegion.RecordDelete(store.index, lumpid)
+		store.jr.Unlock()
 	}
 
 	var releasedSize uint32
@@ -531,6 +592,7 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, ui
 
 /*
 return value: len([]float) no more than 12800 points, each point is 4MB
+//thread-UNSAFE
 */
 func (store *Storage) GetAllocationStatus() []float64 {
 	//each point represents 4M bytes
@@ -551,28 +613,46 @@ func (store *Storage) GetAllocationStatus() []float64 {
 	return store.alloc.GetAllocationBitStatus(n, total)
 }
 
-func (store *Storage) JournalSync() {
+func (store *Storage) Sync() {
+	store.jr.Lock()
+	defer store.jr.Unlock()
+	store.journalSync()
+}
+
+func (store *Storage) journalSync() {
 	store.journalRegion.Sync()
 }
 
 func (store *Storage) Close() {
+
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	store.updateCapacityStopper.Stop() //will wait goroutine's end
-	store.journalRegion.Sync()
+	store.journalSync()
 	store.innerNVM.Close()
 
 }
 
 func (store *Storage) RunSideJobOnce() {
+	store.i.Lock()
+	defer store.i.Unlock()
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	store.journalRegion.RunSideJobOnce(store.index)
 }
 
 //half open range: [start, end)
 func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPortion bool) error {
 	//write a DeleteRange record into journal
-	if err := store.journalRegion.RecordDeleteRange(store.index, start, end); err != nil {
+	store.i.Lock()
+	defer store.i.Unlock()
+
+	store.jr.Lock()
+	err := store.journalRegion.RecordDeleteRange(store.index, start, end)
+	store.jr.Unlock()
+	if err != nil {
 		return err
 	}
-
 	return store.index.RangeIter(start, end, func(id lump.LumpId, p portion.Portion) error {
 		p, err := store.index.Get(id)
 		if err != nil {
@@ -583,15 +663,15 @@ func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPor
 		case portion.DataPortion:
 			store.dataRegion.Release(v)
 		}
-
 		return nil
 
 	})
 }
 
 //added API for raft log and raft apply
-
 func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error) {
+	store.i.Lock()
+	defer store.i.Unlock()
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return nil, err
@@ -605,6 +685,8 @@ func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error
 }
 
 func (store *Storage) Has(lumpid lump.LumpId) bool {
+	store.i.Lock()
+	defer store.i.Unlock()
 	_, err := store.index.Get(lumpid)
 	if err != nil {
 		return false
@@ -613,6 +695,11 @@ func (store *Storage) Has(lumpid lump.LumpId) bool {
 }
 
 func (store *Storage) DeleteRecord(lumpid lump.LumpId) error {
+	store.i.Lock()
+	defer store.i.Unlock()
+	store.jr.Lock()
+	defer store.jr.Unlock()
+
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return err
@@ -629,6 +716,10 @@ func (store *Storage) DeleteRecord(lumpid lump.LumpId) error {
 }
 
 func (store *Storage) WriteRecord(lumpid lump.LumpId, dataPortion portion.DataPortion) error {
+	store.i.Lock()
+	defer store.i.Unlock()
+	store.jr.Lock()
+	defer store.jr.Unlock()
 	if err := store.journalRegion.RecordPut(store.index, lumpid, dataPortion); err != nil {
 		return err
 	}

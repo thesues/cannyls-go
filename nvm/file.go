@@ -205,6 +205,10 @@ func (nvm *FileNVM) Seek(offset int64, whence int) (int64, error) {
 
 //read,write threadSafe
 func (nvm *FileNVM) ReadAt(buf []byte, off int64) (n int, err error) {
+	if !block.Min().IsAligned(uint64(off)) {
+		return int(off), errors.Wrapf(internalerror.InvalidInput, "not aligned :%d in seek", off)
+	}
+
 	maxLen := nvm.Capacity() - uint64(off)
 	if maxLen == 0 {
 		return 0, io.EOF
@@ -245,6 +249,28 @@ func (nvm *FileNVM) Read(buf []byte) (n int, err error) {
 	}
 
 	nvm.cursor_position = newPosition
+	return n, nil
+}
+
+func (nvm *FileNVM) WriteAt(buf []byte, offset int64) (n int, err error) {
+
+	if !block.Min().IsAligned(uint64(offset)) {
+		return int(offset), errors.Wrapf(internalerror.InvalidInput, "not aligned :%d in seek", offset)
+	}
+
+	realPos := int64(nvm.viewStart) + offset
+	maxLen := nvm.Capacity() - uint64(offset)
+	bufLen := uint64(len(buf))
+
+	if !block.Min().IsAligned(bufLen) {
+		return -1, errors.Wrapf(internalerror.InvalidInput, "not aligned :%d, in write", bufLen)
+	}
+
+	len := util.Min(maxLen, bufLen)
+
+	if n, err = nvm.file.WriteAt(buf[:len], realPos); err != nil {
+		return -1, errors.Wrap(err, "FileNVM failed to write")
+	}
 	return n, nil
 }
 

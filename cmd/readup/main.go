@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"io"
 	"os"
@@ -41,7 +40,6 @@ type GetAllocRequest struct {
 }
 
 var backupRuning bool = false
-var mutex sync.Mutex
 
 type BackupRequest struct {
 	onlyCreateSnapshot bool
@@ -60,13 +58,6 @@ type PutRequest struct {
 type PutResult struct {
 	id  uint64
 	err error
-}
-
-//get
-type GetRequest struct {
-	ctx        context.Context
-	id         uint64
-	resultChan chan GetResult
 }
 
 type GetResult struct {
@@ -90,42 +81,10 @@ func chooseID(store *storage.Storage) (lump.LumpId, bool) {
 	return store.GenerateEmptyId()
 }
 
-func handleGetRequest(store *storage.Storage, request GetRequest) {
-
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	var response GetResult
-	select {
-	case <-request.ctx.Done():
-		//timeout
-		response.err = TimeoutError
-		request.resultChan <- response
-		return
-	default:
-	}
-	var id lump.LumpId = lump.FromU64(0, request.id)
-
-	var err error
-	response.data, err = store.Get(id)
-	if err != nil {
-		response.err = err
-	}
-
-	select {
-	//timeout
-	case <-request.ctx.Done():
-		request.resultChan <- GetResult{data: nil, err: TimeoutError}
-	case request.resultChan <- response:
-	}
-}
-
 func handleBackupRequest(store *storage.Storage, request BackupRequest) {
 	if request.onlyCreateSnapshot {
 		//lock
-		mutex.Lock()
 		err := store.CreateSnapshot()
-		mutex.Unlock()
 		//unlock
 		if err != nil {
 			request.resultChan <- false
@@ -141,10 +100,7 @@ func handleBackupRequest(store *storage.Storage, request BackupRequest) {
 	}
 
 	//lock()
-	mutex.Lock()
-	store.JournalSync()
 	reader, err := store.GetSnapshotReader()
-	mutex.Unlock()
 	//unlock()
 	if err != nil {
 		request.resultChan <- false
@@ -170,18 +126,15 @@ func handleBackupRequest(store *storage.Storage, request BackupRequest) {
 				return
 			case <-time.After(100 * time.Millisecond):
 				//lock
-				mutex.Lock()
+
 				n, err := reader.Read(buf[:])
-				mutex.Unlock()
 				fmt.Printf("copy out data %d, %+v\n", n, err)
 				//unlock
 				if err != nil && err != io.EOF {
 					return
 				}
 				if n == 0 {
-					mutex.Lock()
 					store.DeleteSnapshot()
-					mutex.Unlock()
 					backfile.Close()
 					return
 				}
@@ -196,59 +149,12 @@ func handleBackupRequest(store *storage.Storage, request BackupRequest) {
 
 }
 
-func handleRandomRequest(store *storage.Storage, request DeleteRequest) {
-
-	mutex.Lock()
-	defer mutex.Unlock()
-	var response GetResult
-	var err error
-	select {
-	case <-request.ctx.Done():
-		//timeout
-		response.err = TimeoutError
-		request.resultChan <- response
-		return
-	default:
-	}
-
-	id, have := store.MinId()
-	if have == false {
-		response.data = nil
-		response.err = NoKeyError
-		goto END
-	}
-	response.data, err = store.Get(id)
-	if err != nil {
-		response.err = err
-		goto END
-	}
-
-	_, _, err = store.Delete(id)
-	if err != nil {
-		response.err = err
-	}
-
-END:
-	select {
-	//timeout
-	case <-request.ctx.Done():
-		request.resultChan <- GetResult{data: nil, err: TimeoutError}
-	case request.resultChan <- response:
-	}
-}
-
 func handleAllocRequest(store *storage.Storage, request GetAllocRequest) {
-	mutex.Lock()
-	defer mutex.Unlock()
 	vec := store.GetAllocationStatus()
 	request.resultChan <- vec
 }
 
 func handlePutRequest(store *storage.Storage, request PutRequest) {
-
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	var response PutResult
 
 	select {
@@ -275,7 +181,7 @@ func handlePutRequest(store *storage.Storage, request PutRequest) {
 	if err != nil {
 		response.err = err
 	}
-	store.JournalSync()
+	//store.Sync()
 
 	select {
 	//timeout
@@ -304,10 +210,6 @@ func ServeStore(store *storage.Storage) {
 				switch request.(type) {
 				case PutRequest:
 					handlePutRequest(store, request.(PutRequest))
-				case GetRequest:
-					handleGetRequest(store, request.(GetRequest))
-				case DeleteRequest:
-					handleRandomRequest(store, request.(DeleteRequest))
 				case GetAllocRequest:
 					handleAllocRequest(store, request.(GetAllocRequest))
 				case BackupRequest:
@@ -324,35 +226,31 @@ func ServeStore(store *storage.Storage) {
 	r.GET("/usage", func(c *gin.Context) {
 		c.JSON(200, store.Usage())
 	})
+
 	//call delete
 	r.GET("/random", func(c *gin.Context) {
-		ctx := context.Background()
-		request := DeleteRequest{
-			ctx:        ctx,
-			resultChan: make(chan GetResult),
+		id, have := store.MinId()
+		if !have {
+			c.String(404, "do not have")
+			return
 		}
-
-		reqeustChan <- request
-
-		select {
-		case out := <-request.resultChan:
-			if out.err != nil {
-				c.String(400, out.err.Error())
-			} else {
-				c.Status(200)
-				c.Header("content-length", fmt.Sprintf("%d", len(out.data)))
-				c.Stream(func(w io.Writer) bool {
-					_, err := w.Write(out.data)
-					if err != nil {
-						return true
-					}
-					return false
-				})
-				return
+		data, err := store.Get(id)
+		if err != nil {
+			c.String(500, err.Error())
+			return
+		}
+		store.Delete(id)
+		c.Status(200)
+		c.Header("content-length", fmt.Sprintf("%d", len(data)))
+		c.Stream(func(w io.Writer) bool {
+			_, err := w.Write(data)
+			if err != nil {
+				fmt.Println(err)
+				return true
 			}
-		case <-ctx.Done():
-			c.String(400, "TIMEOUT")
-		}
+			return false
+		})
+
 	})
 
 	r.Use(static.Serve("/static", static.LocalFile("./static", false)))
@@ -375,35 +273,23 @@ func ServeStore(store *storage.Storage) {
 			c.String(400, err.Error())
 			return
 		}
-		ctx := context.Background()
-		request := GetRequest{
-			ctx:        ctx,
-			id:         uint64(id),
-			resultChan: make(chan GetResult),
+
+		data, err := store.Get(lump.FromU64(0, id))
+		if err != nil {
+			c.String(500, err.Error())
+			return
 		}
-
-		reqeustChan <- request
-
-		select {
-		case out := <-request.resultChan:
-			if out.err != nil {
-				c.String(400, out.err.Error())
-			} else {
-				c.Status(200)
-				c.Header("content-length", fmt.Sprintf("%d", len(out.data)))
-				c.Stream(func(w io.Writer) bool {
-					_, err := w.Write(out.data)
-					if err != nil {
-						fmt.Println(err)
-						return true
-					}
-					return false
-				})
-				return
+		c.Status(200)
+		c.Header("content-length", fmt.Sprintf("%d", len(data)))
+		c.Stream(func(w io.Writer) bool {
+			_, err := w.Write(data)
+			if err != nil {
+				fmt.Println(err)
+				return true
 			}
-		case <-ctx.Done():
-			c.String(400, "TIMEOUT")
-		}
+			return false
+		})
+		return
 	})
 
 	r.POST("/snapshot/:op", func(c *gin.Context) {
@@ -553,6 +439,7 @@ func main() {
 		storagePath := c.String("storage")
 		store, err := storage.OpenCannylsStorage(storagePath)
 		if err != nil {
+			fmt.Printf("failed to open %+v", err)
 			return
 		}
 		ServeStore(store)

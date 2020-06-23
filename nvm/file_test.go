@@ -270,6 +270,22 @@ func TestFileReadHole2(t *testing.T) {
 	assert.Equal(t, 32<<20, n)
 }
 
+func TestFileReadAtWriteAt(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio.lusf")
+	wbuf := alignedWithSize(512)
+	wbuf[0] = 10
+	wbuf[34] = 9
+	wbuf[500] = 8
+	rbuf := alignedWithSize(512)
+	_, err = nvm.WriteAt(wbuf, 512)
+	assert.Nil(t, err)
+	_, err = nvm.ReadAt(rbuf, 512)
+	assert.Nil(t, err)
+	assert.Equal(t, wbuf, rbuf)
+}
+
 //helper function
 func align(bytes []byte) []byte {
 	ab := block.FromBytes(bytes, block.Min())

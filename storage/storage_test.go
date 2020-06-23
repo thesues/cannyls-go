@@ -28,6 +28,9 @@ func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 
 	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01)
+	assert.Nil(t, err)
+	defer os.Remove("tmp11.lusf")
+
 	storage.Put(lumpid("0000"), zeroedData(512*3+10))
 
 	updated, size, err := storage.Delete(lumpid("0000"))
@@ -37,7 +40,7 @@ func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 	assert.Equal(t, uint32(512*4), size)
 
 	defer storage.Close()
-	defer os.Remove("tmp11.lusf")
+
 }
 
 func TestStorage_GetSize(t *testing.T) {
@@ -88,7 +91,7 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 	assert.False(t, updated)
 
 	//snapshot
-	storage.JournalSync()
+	storage.Sync()
 	reader, err := storage.GetSnapshotReader()
 	defer storage.innerNVM.DeleteSnapshot()
 	assert.Nil(t, err)
@@ -124,7 +127,7 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 
 	backup, _ := os.OpenFile("backup.lusf", os.O_CREATE|os.O_RDWR, 0644)
 	defer os.Remove("backup.lusf")
-	storage.JournalSync()
+	storage.Sync()
 	io.Copy(backup, reader)
 
 	storage.Close()
@@ -432,8 +435,8 @@ func TestMetricHttpSever(t *testing.T) {
 		storage.PutEmbed(lumpidnum(i), dummyData)
 	}
 
-	storage.JournalSync()
-	storage.JournalSync()
+	storage.Sync()
+	storage.Sync()
 
 	req, err := http.NewRequest("GET", "/", nil)
 	if err != nil {
@@ -491,6 +494,7 @@ func TestStorageRangeDelete(t *testing.T) {
 	}
 }
 
+/*
 func TestStorageRangeIter(t *testing.T) {
 	var err error
 	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
@@ -510,3 +514,4 @@ func TestStorageRangeIter(t *testing.T) {
 		return nil
 	}, true)
 }
+*/

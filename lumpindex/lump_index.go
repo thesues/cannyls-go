@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"math"
 
+	"sync/atomic"
+
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/address"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/portion"
 	judy "github.com/thesues/go-judy"
-	"sync/atomic"
 )
 
 var _ = fmt.Println

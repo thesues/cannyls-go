@@ -2,6 +2,7 @@ package nvm
 
 import (
 	"io"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
@@ -9,6 +10,7 @@ import (
 )
 
 type MemoryNVM struct {
+	sync.RWMutex
 	vec      []byte
 	position uint64
 }
@@ -63,6 +65,8 @@ func (memory *MemoryNVM) Split(p uint64) (sp1 NonVolatileMemory, sp2 NonVolatile
 
 func (memory *MemoryNVM) Seek(offset int64, whence int) (int64, error) {
 
+	memory.Lock()
+	defer memory.Unlock()
 	if !memory.BlockSize().IsAligned(uint64(offset)) {
 		return -1, errors.Wrapf(internalerror.InvalidInput, "block size is not aligned, offset: %d", offset)
 	}
@@ -81,6 +85,8 @@ func (memory *MemoryNVM) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (memory *MemoryNVM) Read(buf []byte) (n int, err error) {
+	memory.RLock()
+	defer memory.RUnlock()
 	if memory.position >= uint64(len(memory.vec)) {
 		return 0, io.EOF
 	}
@@ -91,6 +97,9 @@ func (memory *MemoryNVM) Read(buf []byte) (n int, err error) {
 }
 
 func (memory *MemoryNVM) Write(p []byte) (n int, err error) {
+	memory.Lock()
+	defer memory.Unlock()
+
 	if !memory.BlockSize().IsAligned(uint64(len(p))) {
 		return -1, internalerror.InvalidInput
 	}
@@ -109,10 +118,23 @@ func (memory *MemoryNVM) BlockSize() block.BlockSize {
 
 //Thread-Safe
 func (memory *MemoryNVM) ReadAt(p []byte, off int64) (n int, err error) {
+	memory.RLock()
+	defer memory.RUnlock()
 	if off >= int64(len(memory.vec)) {
 		return 0, io.EOF
 	}
-	n = copy(p, memory.vec[memory.position:])
+	n = copy(p, memory.vec[off:])
+	return n, nil
+}
+
+func (memory *MemoryNVM) WriteAt(p []byte, off int64) (n int, err error) {
+	memory.Lock()
+	defer memory.Unlock()
+	if off >= int64(len(memory.vec)) {
+		return 0, io.EOF
+	}
+	//maxLen := util.Min(uint64(len(memory.vec))-uint64(off), uint64(len(p)))
+	n = copy(memory.vec[off:], p)
 	return n, nil
 }
 

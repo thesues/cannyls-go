@@ -11,6 +11,7 @@ type NonVolatileMemory interface {
 	io.ReadWriteSeeker
 	io.Closer
 	io.ReaderAt
+	io.WriterAt
 	Sync() error
 	Position() uint64
 	Capacity() uint64

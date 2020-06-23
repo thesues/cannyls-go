@@ -662,6 +662,32 @@ func (self *SnapNVM) Unlock() {
 	self.rawSnapNVM.mu.Unlock()
 }
 
+func (self *SnapNVM) WriteAt(buf []byte, off int64) (n int, err error) {
+	self.Lock()
+	defer self.Unlock()
+	realPos := self.originFile.ViewStart() + uint64(off)
+	if self.rawSnapNVM.myBackfile != nil {
+		if len(buf) > int(self.rawSnapNVM.myBackfile.RegionSize()) {
+			panic("Write buf is too big")
+		}
+		rawFile := self.rawSnapNVM.originFile
+
+		_, onOrigin := self.rawSnapNVM.myBackfile.GetCopyOffset(realPos, realPos+uint64(len(buf)))
+
+		for i := 0; i < len(onOrigin); i++ {
+			rawFile.Seek(int64(uint64(onOrigin[i])*self.rawSnapNVM.myBackfile.RegionSize()), io.SeekStart)
+			n, err = io.ReadFull(rawFile, self.rawSnapNVM.ab.AsBytes())
+			if n < 0 {
+				panic("fail to read data")
+			}
+			//although n could be less than regionSize at the end of file, we still write
+			//the whole regionSize to backfile
+			self.rawSnapNVM.myBackfile.WriteOffset(self.rawSnapNVM.ab.AsBytes(), onOrigin[i])
+		}
+	}
+	return self.originFile.WriteAt(buf, off)
+}
+
 func (self *SnapNVM) Write(buf []byte) (n int, err error) {
 	self.Lock()
 	defer self.Unlock()
@@ -784,6 +810,11 @@ func (self *SnapNVM) DeleteSnapshot() error {
 		self.myBackfile = nil
 	}
 	return nil
+}
+func (self *SnapNVM) CreateSnapshotIfNeeded() (err error) {
+	self.Lock()
+	defer self.Unlock()
+	return self.createSnapshotIfNeeded()
 }
 
 func (self *SnapNVM) createSnapshotIfNeeded() (err error) {
