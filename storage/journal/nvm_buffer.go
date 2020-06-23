@@ -220,3 +220,11 @@ func (jb *JournalNvmBuffer) isDirty(offset uint64, length int) bool {
 	}
 
 }
+
+func (jb *JournalNvmBuffer) ReadAt(buf []byte, off int64) (n int, err error) {
+	panic("nvm buffer does not implement ReadAt")
+}
+
+func (jb *JournalNvmBuffer) WriteAt(buf []byte, off int64) (n int, err error) {
+	panic("nvm buffer does not implement WriteAt")
+}

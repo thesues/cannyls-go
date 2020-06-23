@@ -53,10 +53,27 @@ func (ab *AlignedBytes) BlockSize() BlockSize {
 	return ab.block
 }
 
+//FromBytes may use the origin buffer,so Do not use this buf again
 func FromBytes(src []byte, blockSize BlockSize) *AlignedBytes {
-	newAlignedBytes := NewAlignedBytes(len(src), blockSize)
-	copy(newAlignedBytes.buf, src)
-	return newAlignedBytes
+	ab, _ := fromBytes(src, blockSize)
+	return ab
+}
+
+//for debug
+func fromBytes(src []byte, blockSize BlockSize) (*AlignedBytes, bool) {
+	a := alignment(src, blockSize.AsU16())
+	capacity := blockSize.CeilAlign(uint64(len(src)))
+	if a != 0 || capacity > uint64(cap(src)) {
+		newAlignedBytes := NewAlignedBytes(len(src), blockSize)
+		copy(newAlignedBytes.buf, src)
+		return newAlignedBytes, true
+	}
+	return &AlignedBytes{
+		buf:    src[:cap(src)],
+		len:    uint32(len(src)),
+		offset: 0,
+		block:  blockSize,
+	}, false
 }
 
 func (ab *AlignedBytes) Align() *AlignedBytes {

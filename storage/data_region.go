@@ -2,7 +2,7 @@ package storage
 
 import (
 	"fmt"
-	"io"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
@@ -19,6 +19,7 @@ const (
 )
 
 type DataRegion struct {
+	sync.Mutex //protect the allocator
 	allocator  allocator.DataPortionAlloc
 	nvm        nvm.NonVolatileMemory
 	block_size block.BlockSize
@@ -52,8 +53,9 @@ func (region *DataRegion) shiftBlockSize(size uint32) uint32 {
 */
 
 //WARNING: this PUT would CHANGE (data *lump.LumpData),
+//thread-safe
 func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
-	//
+
 	size := data.Inner.Len() + LUMP_DATA_TRAILER_SIZE
 
 	//Aligned
@@ -67,8 +69,11 @@ func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 	}
 	util.PutUINT16(data.Inner.AsBytes()[trailer_offset:], uint16(padding_len))
 
-	required_blocks := region.shiftBlockSize(data.Inner.Len())
-	data_portion, err := region.allocator.Allocate(uint16(required_blocks))
+	requiredBlocks := region.shiftBlockSize(data.Inner.Len())
+
+	region.Lock()
+	data_portion, err := region.allocator.Allocate(uint16(requiredBlocks))
+	region.Unlock()
 
 	if err != nil {
 		return portion.DataPortion{}, err
@@ -80,30 +85,43 @@ func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 			data.Inner.Len(), len))
 		//FIXME
 	}
-	if _, err = region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
-		return data_portion, err
-	}
-	if _, err = region.nvm.Write(data.Inner.AsBytes()); err != nil {
-		return data_portion, err
-	}
+	/*
+		if _, err = region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
+			return data_portion, err
+		}
+		if _, err = region.nvm.Write(data.Inner.AsBytes()); err != nil {
+			return data_portion, err
+		}
+	*/
+	_, err = region.nvm.WriteAt(data.Inner.AsBytes(), int64(offset))
 
 	return data_portion, err
 }
 
+//thread-safe
 func (region *DataRegion) readBlocks(readOffset int64, blockCount int) ([]byte, error) {
 	ab := block.NewAlignedBytes(blockCount*int(region.block_size), region.block_size)
 	ab.Align()
-	_, err := region.nvm.Seek(readOffset, io.SeekStart)
+
+	_, err := region.nvm.ReadAt(ab.AsBytes(), readOffset)
 	if err != nil {
 		return nil, err
 	}
-	_, err = region.nvm.Read(ab.AsBytes())
-	if err != nil {
-		return nil, err
-	}
+	/*
+		_, err := region.nvm.Seek(readOffset, io.SeekStart)
+		if err != nil {
+			return nil, err
+		}
+		_, err = region.nvm.Read(ab.AsBytes())
+		if err != nil {
+			return nil, err
+		}
+	*/
+	//return ab.AsBytes(), nil
 	return ab.AsBytes(), nil
 }
 
+//thread safe
 func (region *DataRegion) Update(dataPortion portion.DataPortion,
 	startOffset uint32, payload []byte) error {
 
@@ -130,27 +148,43 @@ func (region *DataRegion) Update(dataPortion portion.DataPortion,
 		}
 	}
 
-	_, err = region.nvm.Seek(int64(readOffset), io.SeekStart)
-	if err != nil {
-		return err
-	}
-	// data is already aligned since it's returned from AlignedBytes
-	_, err = region.nvm.Write(data)
+	/*
+		_, err = region.nvm.Seek(int64(readOffset), io.SeekStart)
+		if err != nil {
+			return err
+		}
+		// data is already aligned since it's returned from AlignedBytes
+		_, err = region.nvm.Write(data)
+	*/
+	region.nvm.WriteAt(data, int64(readOffset))
 	return err
 }
 
+//thread safe
 func (region *DataRegion) Release(portion portion.DataPortion) {
+	region.Lock()
+	defer region.Unlock()
 	region.allocator.Release(portion)
 }
 
+//read/write threadSafe
 func (region *DataRegion) GetSize(dataPortion portion.DataPortion) (size uint32, err error) {
-	_, err = region.nvm.Seek(int64(dataPortion.ShiftToPaddingBlock(region.block_size)),
-		io.SeekStart)
-	if err != nil {
-		return 0, err
-	}
+	/*
+		_, err = region.nvm.Seek(int64(dataPortion.ShiftToPaddingBlock(region.block_size)),
+			io.SeekStart)
+		if err != nil {
+			return 0, err
+		}
+		buf := make([]byte, region.block_size)
+		_, err = io.ReadFull(region.nvm, buf)
+		if err != nil {
+			return 0, err
+		}
+	*/
+
+	offset := int64(dataPortion.ShiftToPaddingBlock(region.block_size))
 	buf := make([]byte, region.block_size)
-	_, err = io.ReadFull(region.nvm, buf)
+	_, err = util.ReadFull(region.nvm, buf, offset)
 	if err != nil {
 		return 0, err
 	}
@@ -160,27 +194,35 @@ func (region *DataRegion) GetSize(dataPortion portion.DataPortion) (size uint32,
 	return size, nil
 }
 
+//read/write thread safe
 func (region *DataRegion) Get(dataPortion portion.DataPortion) (lump.LumpData, error) {
 	offset, len := dataPortion.ShiftBlockToBytes(region.block_size)
 
-	if _, err := region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
-		return lump.LumpData{}, err
-	}
+	/*
+		if _, err := region.nvm.Seek(int64(offset), io.SeekStart); err != nil {
+			return lump.LumpData{}, err
+		}
 
+		ab := block.NewAlignedBytes(int(len), region.block_size)
+
+		if _, err := region.nvm.Read(ab.AsBytes()); err != nil {
+			return lump.LumpData{}, err
+		}
+	*/
 	ab := block.NewAlignedBytes(int(len), region.block_size)
-
-	if _, err := region.nvm.Read(ab.AsBytes()); err != nil {
+	//_, err := util.ReadFull(region.nvm, ab.AsBytes(), int64(offset))
+	if _, err := region.nvm.ReadAt(ab.AsBytes(), int64(offset)); err != nil {
 		return lump.LumpData{}, err
 	}
+	paddingSize := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
 
-	padding_size := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
-
-	ab.Resize(ab.Len() - padding_size - LUMP_DATA_TRAILER_SIZE)
+	ab.Resize(ab.Len() - paddingSize - LUMP_DATA_TRAILER_SIZE)
 	return lump.NewLumpDataWithAb(ab), nil
 }
 
 //more friendly data portion read. only read up user required data.
 //the returned bytes could be less than length
+//thread-safe
 func (region *DataRegion) GetWithOffset(dataPortion portion.DataPortion,
 	startOffset uint32, length uint32) ([]byte, error) {
 

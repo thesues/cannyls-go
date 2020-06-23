@@ -5,8 +5,9 @@ go 1.12
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/dustin/go-humanize v1.0.0
+	github.com/gin-contrib/pprof v1.3.0
 	github.com/gin-contrib/static v0.0.0-20190511124741-c1cdf9c9ec7b
-	github.com/gin-gonic/gin v1.4.0
+	github.com/gin-gonic/gin v1.6.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/klauspost/readahead v1.3.0
@@ -19,10 +20,8 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.4.0
 	github.com/thesues/go-judy v0.1.3
-	github.com/twinj/uuid v1.0.0
 	github.com/urfave/cli v1.20.0
 	go.opencensus.io v0.22.1
-	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297 // indirect
-	golang.org/x/sys v0.0.0-20190904154756-749cb33beabd // indirect
+	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )

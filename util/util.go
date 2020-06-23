@@ -1,5 +1,7 @@
 package util
 
+import "io"
+
 func PutUINT64(buf []byte, n uint64) {
 	buf[0] = byte(n>>56) & 0xff
 	buf[1] = byte(n>>48) & 0xff
@@ -133,4 +135,22 @@ func Min32(x uint32, y uint32) uint32 {
 	} else {
 		return y
 	}
+}
+
+//thread safe
+func ReadFull(r io.ReaderAt, buf []byte, from int64) (n int, err error) {
+	min := len(buf)
+	offset := from
+	for n < min && err == nil {
+		var nn int
+		nn, err = r.ReadAt(buf[n:], offset)
+		n += nn
+		offset += int64(nn)
+	}
+	if n >= min {
+		err = nil
+	} else if n > 0 && err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return
 }

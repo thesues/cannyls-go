@@ -1,10 +1,25 @@
 package block
 
 import (
-	"github.com/stretchr/testify/assert"
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
+func TestReuseMemory(t *testing.T) {
+	count := 0
+	n := 50000
+	for i := 0; i < n; i++ {
+		x := make([]byte, 4000)
+		_, isNew := fromBytes(x, Min())
+		if !isNew {
+			count++
+		}
+	}
+	fmt.Printf("the reuse percent is %0.2f%%\n", float32(count)/float32(n)*100)
+
+}
 func TestAlignedBytesNew(t *testing.T) {
 	//new
 	aligned := NewAlignedBytes(10, Min())

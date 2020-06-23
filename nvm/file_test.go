@@ -12,6 +12,45 @@ import (
 	"github.com/thesues/cannyls-go/block"
 )
 
+func BenchmarkFile(b *testing.B) {
+	buf := alignedWithSize(512)
+	buf[511] = 10
+	f, err := openFileWithDirectIO("./normal-file", os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer os.Remove("./normal-file")
+	for i := 0; i < b.N; i++ {
+		_, err = f.Write(buf)
+		if err != nil {
+			panic(err.Error())
+		}
+		f.Sync()
+	}
+	f.Close()
+}
+
+func BenchmarkNVM(b *testing.B) {
+	buf := alignedWithSize(512)
+	buf[511] = 10
+	//create a new file
+	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024*1024)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer os.Remove("foo-test.lusf")
+
+	for i := 0; i < b.N; i++ {
+		_, err = nvm.Write(buf)
+		if err != nil {
+			panic(err.Error())
+		}
+		nvm.Sync()
+	}
+	nvm.Close()
+
+}
+
 func TestFileNVMOpen(t *testing.T) {
 
 	//open an non-exist file
@@ -229,6 +268,22 @@ func TestFileReadHole2(t *testing.T) {
 	n, err := io.ReadFull(nvm, buf)
 	assert.Nil(t, err)
 	assert.Equal(t, 32<<20, n)
+}
+
+func TestFileReadAtWriteAt(t *testing.T) {
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	assert.Nil(t, err)
+	defer os.Remove("foo-dio.lusf")
+	wbuf := alignedWithSize(512)
+	wbuf[0] = 10
+	wbuf[34] = 9
+	wbuf[500] = 8
+	rbuf := alignedWithSize(512)
+	_, err = nvm.WriteAt(wbuf, 512)
+	assert.Nil(t, err)
+	_, err = nvm.ReadAt(rbuf, 512)
+	assert.Nil(t, err)
+	assert.Equal(t, wbuf, rbuf)
 }
 
 //helper function
