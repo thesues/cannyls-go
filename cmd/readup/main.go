@@ -10,7 +10,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/gin-gonic/gin"
+	"go.opencensus.io/trace"
+
+	"context"
+	"net/http"
+	"time"
 
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-contrib/static"
@@ -20,10 +26,6 @@ import (
 	"github.com/thesues/cannyls-go/storage"
 	"github.com/thesues/cannyls-go/util"
 	"github.com/urfave/cli"
-
-	"context"
-	"net/http"
-	"time"
 )
 
 //https://gist.github.com/davealbert/6278ecbdf679c755f29bab5d325e2995
@@ -129,20 +131,24 @@ func ServeStore(store *storage.Storage) {
 				}
 
 				var results []PutResult
+
 				fmt.Printf("len of slurp is %d\n", len(requests))
 				for _, req := range requests {
+					_, span := trace.StartSpan(req.ctx, "write cannyls")
 					var id lump.LumpId = lump.FromU64(0, req.id)
 					var have bool
 					if req.isAutoId {
 						id, have = chooseID(store)
 						if !have {
 							req.resultChan <- PutResult{id.U64(), NoLumpIdSpaceError, nil}
+							span.End()
 							return
 						}
 					}
-
+					span.Annotate(nil, "Cannyls: put data")
 					_, err := store.Put(id, req.data)
-
+					span.Annotate(nil, "Cannyls: put data done")
+					span.End()
 					var result PutResult
 					result.id = id.U64()
 					if err != nil {
@@ -152,7 +158,15 @@ func ServeStore(store *storage.Storage) {
 					results = append(results, result)
 				}
 
+				var spans []*trace.Span
+				for _, req := range requests {
+					_, span := trace.StartSpan(req.ctx, "sync")
+					spans = append(spans, span)
+				}
 				store.Sync()
+				for i := range spans {
+					spans[i].End()
+				}
 				for _, result := range results {
 					result.resultChan <- result
 				}
@@ -332,7 +346,11 @@ func ServeStore(store *storage.Storage) {
 			return
 		}
 
-		ctx := context.Background()
+		//ctx := context.Background()
+
+		ctx, span := trace.StartSpan(context.Background(), "PutRequest")
+		defer span.End()
+		span.Annotate(nil, "HTTP START")
 		request := PutRequest{
 			ctx:        ctx,
 			data:       ab,
@@ -345,6 +363,7 @@ func ServeStore(store *storage.Storage) {
 
 		select {
 		case out := <-request.resultChan:
+			span.Annotate(nil, "HTTP END")
 			if out.err != nil {
 				c.String(400, out.err.Error())
 			} else {
@@ -407,6 +426,17 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "storage"},
 	}
+
+	je, err := jaeger.NewExporter(jaeger.Options{
+		Endpoint:    "http://localhost:14268",
+		ServiceName: "readup",
+	})
+	trace.RegisterExporter(je)
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create the Jaeger exporter: %+v", err))
+	}
 	app.Action = func(c *cli.Context) {
 		storagePath := c.String("storage")
 		store, err := storage.OpenCannylsStorage(storagePath)
@@ -417,7 +447,7 @@ func main() {
 		ServeStore(store)
 	}
 
-	err := app.Run(os.Args)
+	err = app.Run(os.Args)
 	if err != nil {
 		fmt.Println(err)
 	}

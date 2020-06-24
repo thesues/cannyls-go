@@ -585,6 +585,7 @@ func BenchmarkStoragePutDataMultiThread(b *testing.B) {
 			})
 		}
 		stopper.Wait()
+		storage.Sync()
 	}
 }
 
@@ -598,6 +599,7 @@ func BenchmarkStoragePutDataSingleThread(b *testing.B) {
 			storage.Put(lumpidnum(index), d)
 			d.Inner.Resize(42)
 		}
+		storage.Sync()
 	}
 }
 

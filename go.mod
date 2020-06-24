@@ -3,6 +3,7 @@ module github.com/thesues/cannyls-go
 go 1.12
 
 require (
+	contrib.go.opencensus.io/exporter/jaeger v0.1.0
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/gin-contrib/pprof v1.3.0
