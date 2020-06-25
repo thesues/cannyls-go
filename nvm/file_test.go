@@ -10,7 +10,31 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/cannyls-go/block"
+	"github.com/thesues/cannyls-go/util"
 )
+
+func BenchmarkFileThreads(b *testing.B) {
+	buf := alignedWithSize(512)
+	buf[511] = 10
+	f, err := openFileWithDirectIO("./normal-file", os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer os.Remove("./normal-file")
+
+	for i := 0; i < b.N; i++ {
+		stopper := util.NewStopper()
+		for j := 0; j < 10; j++ {
+			index := j
+			stopper.RunWorker(func() {
+				f.WriteAt(buf, int64(index)*512)
+			})
+		}
+		stopper.Wait()
+		f.Sync()
+	}
+	f.Close()
+}
 
 func BenchmarkFile(b *testing.B) {
 	buf := alignedWithSize(512)
@@ -21,9 +45,11 @@ func BenchmarkFile(b *testing.B) {
 	}
 	defer os.Remove("./normal-file")
 	for i := 0; i < b.N; i++ {
-		_, err = f.Write(buf)
-		if err != nil {
-			panic(err.Error())
+		for j := 0; j < 10; j++ {
+			_, err = f.Write(buf)
+			if err != nil {
+				panic(err.Error())
+			}
 		}
 		f.Sync()
 	}
@@ -41,9 +67,11 @@ func BenchmarkNVM(b *testing.B) {
 	defer os.Remove("foo-test.lusf")
 
 	for i := 0; i < b.N; i++ {
-		_, err = nvm.Write(buf)
-		if err != nil {
-			panic(err.Error())
+		for j := 0; j < 10; j++ {
+			_, err = nvm.Write(buf)
+			if err != nil {
+				panic(err.Error())
+			}
 		}
 		nvm.Sync()
 	}
