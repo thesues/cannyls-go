@@ -30,7 +30,6 @@ type JournalRegion struct {
 	gcQueue       *queue.Queue
 	syncCountDown int
 	gcAfterAppend bool
-	autoSync      bool
 }
 
 func (journal *JournalRegion) SetAutomaticGcMode(gc bool) {
@@ -52,7 +51,7 @@ func InitialJournalRegion(writer io.Writer, sector block.BlockSize) {
 	}
 }
 
-func OpenJournalRegion(nvm nvm.NonVolatileMemory, autoSync bool) (*JournalRegion, error) {
+func OpenJournalRegion(nvm nvm.NonVolatileMemory) (*JournalRegion, error) {
 
 	blockSize := nvm.BlockSize()
 
@@ -82,7 +81,6 @@ func OpenJournalRegion(nvm nvm.NonVolatileMemory, autoSync bool) (*JournalRegion
 		gcQueue:       q,
 		syncCountDown: SYNC_INTERVAL,
 		gcAfterAppend: true,
-		autoSync:      autoSync,
 	}, nil
 }
 
@@ -286,10 +284,11 @@ func (journal *JournalRegion) Sync() {
 	ostats.Record(context.Background(), x.JournalRegionMetric.Syncs.M(1))
 }
 
+func (journal *JournalRegion) Flush() error {
+	return journal.ring.Flush()
+}
+
 func (journal *JournalRegion) trySync() {
-	if journal.autoSync == false {
-		return
-	}
 	if journal.syncCountDown <= 0 {
 		journal.Sync()
 	} else {

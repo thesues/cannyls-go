@@ -145,8 +145,15 @@ func ServeStore(store *storage.Storage) {
 							return
 						}
 					}
+					var err error
 					span.Annotate(nil, "Cannyls: put data")
-					_, err := store.Put(id, req.data)
+					/*
+						if req.data.Inner.Len() < lump.MAX_EMBEDDED_SIZE {
+							_, err = store.PutEmbed(id, req.data.Inner.AsBytes())
+						} else {
+					*/
+					_, err = store.Put(id, req.data)
+					//}
 					span.Annotate(nil, "Cannyls: put data done")
 					span.End()
 					var result PutResult
@@ -163,7 +170,9 @@ func ServeStore(store *storage.Storage) {
 					_, span := trace.StartSpan(req.ctx, "sync")
 					spans = append(spans, span)
 				}
-				store.Sync()
+
+				store.Flush()
+				//store.Sync()
 				for i := range spans {
 					spans[i].End()
 				}

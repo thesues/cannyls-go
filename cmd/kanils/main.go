@@ -24,7 +24,7 @@ func createCannyls(c *cli.Context) error {
 	capactiyBytes := c.Uint64("capacity")
 	capactiyBytes = block.Min().CeilAlign(capactiyBytes)
 	fmt.Printf("Creating cannyls <%s>, capacity is <%d>\n", path, capactiyBytes)
-	store, err := storage.CreateCannylsStorage(path, capactiyBytes, 0.01)
+	store, err := storage.CreateCannylsStorage(path, capactiyBytes, 0.1)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		return err

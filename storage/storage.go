@@ -68,7 +68,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 	index := lumpindex.NewIndex()
 	journalNVM, dataNVM := header.SplitRegion(snapNVM)
 
-	journalRegion, err := journal.OpenJournalRegion(journalNVM, false)
+	journalRegion, err := journal.OpenJournalRegion(journalNVM)
 	if err != nil {
 		return nil, err
 	}
@@ -332,35 +332,6 @@ func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.L
 	return store.index.ListRange(start, end, maxSize)
 }
 
-/*
-if isReadData is true, RangeIter will read data from disk
-*/
-/*
-func (store *Storage) RangeIter(start, end lump.LumpId, fn func(id lump.LumpId, data []byte) error, isReadData bool) error {
-	return store.index.RangeIter(start, end, func(id lump.LumpId, p portion.Portion) error {
-		if isReadData == false {
-			return fn(id, nil)
-		}
-		switch v := p.(type) {
-		case portion.DataPortion:
-			lumpdata, err := store.dataRegion.Get(v)
-			if err != nil {
-				return err
-			}
-			return fn(id, lumpdata.AsBytes())
-		case portion.JournalPortion:
-			data, err := store.journalRegion.GetEmbededData(v)
-			if err != nil {
-				return err
-			}
-			return fn(id, data)
-		default:
-			panic("never here")
-		}
-	})
-}
-*/
-
 // Note the returned size is not accurate size of object, but aligned to block size.
 // For accurate object size, use GetSize, which requires a disk IO.
 func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error) {
@@ -619,6 +590,12 @@ func (store *Storage) Sync() {
 	store.jr.Lock()
 	defer store.jr.Unlock()
 	store.journalSync()
+}
+
+func (store *Storage) Flush() {
+	store.jr.Lock()
+	defer store.jr.Unlock()
+	store.journalRegion.Flush()
 }
 
 func (store *Storage) journalSync() {

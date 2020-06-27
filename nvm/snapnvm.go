@@ -384,7 +384,7 @@ func (bf *BackingFile) WriteOffset(buf []byte, offset uint32) {
 func CreateBackingFile(prefix string, maxCapacity uint64, currentCapacity uint64) (*BackingFile, error) {
 	uuidFile := uuid.NewV4()
 	fileName := prefix + "_" + uuidFile.String() + "_lusf.snapshot"
-	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0755)
+	file, err := os.OpenFile(fileName, os.O_SYNC|os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		return nil, err
 	}
