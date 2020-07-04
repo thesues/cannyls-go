@@ -603,6 +603,20 @@ func BenchmarkStoragePutDataSingleThread(b *testing.B) {
 	}
 }
 
+func TestStorageCloseWriteRead(t *testing.T) {
+	storage, err := CreateCannylsStorage("test.lusf", 1024*1024*1024, 0.5)
+	assert.Nil(t, err)
+	defer os.Remove("test.lusf")
+	storage.Close()
+	_, err = storage.Get(lumpidnum(10))
+	assert.Error(t, err)
+	_, err = storage.PutEmbed(lumpidnum(10), []byte("string"))
+	assert.Error(t, err)
+	d := zeroedData(42)
+	_, err = storage.Put(lumpidnum(1), d)
+	assert.Error(t, err)
+}
+
 func BenchmarkStoragGetDataSingleThread(b *testing.B) {
 	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
 	defer os.Remove("bench.lusf")

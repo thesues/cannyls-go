@@ -128,6 +128,11 @@ func (alloc *JudyPortionAlloc) MemoryUsed() uint64 {
 	return alloc.startBasedTree.MemoryUsed() + alloc.sizeBasedTree.MemoryUsed()
 }
 
+func (alloc *JudyPortionAlloc) Free() {
+	alloc.startBasedTree.Free()
+	alloc.sizeBasedTree.Free()
+}
+
 //for debug
 func (alloc *JudyPortionAlloc) allPortions() (sizeBased []JudyPortion, startBased []JudyPortion) {
 	sizeBased = make([]JudyPortion, 0, alloc.sizeBasedTree.CountAll())

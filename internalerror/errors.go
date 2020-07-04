@@ -14,4 +14,5 @@ var (
 	InconsistentState  = errors.New("Inconsistent state")
 	Other              = errors.New("Unknow error")
 	NoEntries          = errors.New("NoEntries")
+	StorageClosed      = errors.New("Stroage Closed")
 )

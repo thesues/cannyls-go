@@ -25,6 +25,7 @@ type DataPortionAlloc interface {
 	FreeCount() uint64
 	GetAllocationBitStatus(n uint64, totalBlocks uint64) []float64
 	MaxSegmentSize() uint64
+	Free()
 }
 
 //TODO: Use ceph bitmap algorithm
@@ -33,6 +34,10 @@ type BtreeDataPortionAlloc struct {
 	endToFree      *btree.BTree
 	freeCount      uint64
 	maxSegmentSize uint64
+}
+
+func (alloc *BtreeDataPortionAlloc) Free() {
+
 }
 
 func (alloc *BtreeDataPortionAlloc) FreeCount() uint64 {
@@ -257,7 +262,7 @@ func (alloc *BtreeDataPortionAlloc) RestoreFromIndex(blockSize block.BlockSize,
 		}
 		tail = p.Start.AsU64()
 	}
-	
+
 	alloc.updateMaxSegmentSize()
 }
 

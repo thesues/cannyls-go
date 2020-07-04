@@ -91,6 +91,9 @@ func (index *LumpIndex) Max() (id lump.LumpId, ok bool) {
 	return
 }
 
+func (index *LumpIndex) Free() {
+	index.tree.Free()
+}
 func (index *LumpIndex) FirstEmpty() (id lump.LumpId, ok bool) {
 	ok = false
 	n, ok := index.tree.FirstEmpty(0)

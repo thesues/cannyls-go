@@ -43,6 +43,7 @@ type Storage struct {
 	innerNVM              *nvm.SnapNVM
 	alloc                 allocator.DataPortionAlloc
 	updateCapacityStopper *util.Stopper
+	opened                bool
 }
 
 type StorageUsage struct {
@@ -106,6 +107,7 @@ func OpenCannylsStorage(path string) (*Storage, error) {
 		innerNVM:              snapNVM,
 		alloc:                 alloc,
 		updateCapacityStopper: util.NewStopper(),
+		opened:                true,
 	}
 
 	//RunWorker == go func()
@@ -220,12 +222,18 @@ func (store *Storage) SetAutomaticGcMode(gc bool) {
 func (store *Storage) List() []lump.LumpId {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return nil
+	}
 	return store.index.List()
 }
 
 func (store *Storage) CreateSnapshot() error {
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return internalerror.StorageClosed
+	}
 	store.journalSync()
 	return store.innerNVM.CreateSnapshotIfNeeded()
 }
@@ -233,12 +241,18 @@ func (store *Storage) CreateSnapshot() error {
 func (store *Storage) DeleteSnapshot() error {
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return internalerror.StorageClosed
+	}
 	return store.innerNVM.DeleteSnapshot()
 }
 
 func (store *Storage) GetSnapshotReader() (*nvm.SnapshotReader, error) {
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return nil, internalerror.StorageClosed
+	}
 	store.journalSync()
 	reader, err := store.innerNVM.GetSnapshotReader()
 	if err != nil {
@@ -263,24 +277,36 @@ func (store *Storage) Usage() StorageUsage {
 func (store *Storage) MinId() (lump.LumpId, bool) {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return lump.EmptyLump(), false
+	}
 	return store.index.Min()
 }
 
 func (store *Storage) MaxId() (lump.LumpId, bool) {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return lump.EmptyLump(), false
+	}
 	return store.index.Max()
 }
 
 func (store *Storage) First(id lump.LumpId) (lump.LumpId, error) {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return lump.EmptyLump(), internalerror.StorageClosed
+	}
 	return store.index.First(id)
 }
 
 func (store *Storage) GenerateEmptyId() (id lump.LumpId, have bool) {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return lump.EmptyLump(), false
+	}
 	id, have = store.index.Max()
 	if have == false {
 		//the store is empty, use 0 as the first id
@@ -304,6 +330,9 @@ func (store *Storage) JournalGC() {
 	defer store.i.Unlock()
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return
+	}
 	store.journalRegion.GcAllEntries(store.index)
 }
 
@@ -329,6 +358,9 @@ func (store *Storage) JournalSnapshot() JournalSnapshot {
 func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.LumpId {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return nil
+	}
 	return store.index.ListRange(start, end, maxSize)
 }
 
@@ -337,6 +369,9 @@ func (store *Storage) ListRange(start, end lump.LumpId, maxSize uint64) []lump.L
 func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error) {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if !store.opened {
+		return 0, internalerror.StorageClosed
+	}
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return 0, err
@@ -347,8 +382,14 @@ func (store *Storage) GetSizeOnDisk(lumpid lump.LumpId) (size uint32, err error)
 // Get accurate size of object, require a disk IO
 func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
 	store.i.RLock()
+	if !store.opened {
+		store.i.RUnlock()
+		return 0, internalerror.StorageClosed
+	}
 	p, err := store.index.Get(lumpid)
+
 	store.i.RUnlock()
+
 	if err != nil {
 		return 0, err
 	}
@@ -370,6 +411,10 @@ func (store *Storage) GetSize(lumpid lump.LumpId) (size uint32, err error) {
 
 func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 	store.i.RLock()
+	if !store.opened {
+		store.i.RUnlock()
+		return nil, internalerror.StorageClosed
+	}
 	p, err := store.index.Get(lumpid)
 	store.i.RUnlock()
 	if err != nil {
@@ -398,6 +443,10 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 
 func (store *Storage) GetWithOffset(lumpId lump.LumpId, startOffset uint32, length uint32) ([]byte, error) {
 	store.i.RLock()
+	if !store.opened {
+		store.i.RUnlock()
+		return nil, internalerror.StorageClosed
+	}
 	p, err := store.index.Get(lumpId)
 	store.i.RUnlock()
 	if err != nil {
@@ -474,6 +523,10 @@ func (store *Storage) PutWithOffset(lumpid lump.LumpId, lumpdata lump.LumpData,
 	startOffset uint32, reservation uint32) (err error) {
 
 	store.i.RLock()
+	if !store.opened {
+		store.i.RUnlock()
+		return internalerror.StorageClosed
+	}
 	p, err := store.index.Get(lumpid)
 	store.i.RUnlock()
 	payload := lumpdata.AsBytes()
@@ -503,6 +556,7 @@ func (store *Storage) PutEmbed(lumpid lump.LumpId, data []byte) (updated bool, e
 	if updated, _, err = store.deleteIfExist(lumpid, false); err != nil {
 		return
 	}
+
 	store.i.Lock()
 	defer store.i.Unlock()
 	store.jr.Lock()
@@ -520,6 +574,9 @@ func (store *Storage) deleteIfExist(lumpid lump.LumpId, doRecord bool) (bool, ui
 
 	store.i.Lock()
 	defer store.i.Unlock()
+	if !store.opened {
+		return false, 0, internalerror.StorageClosed
+	}
 
 	p, err := store.index.Get(lumpid)
 
@@ -589,12 +646,18 @@ func (store *Storage) GetAllocationStatus() []float64 {
 func (store *Storage) Sync() {
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return
+	}
 	store.journalSync()
 }
 
 func (store *Storage) Flush() {
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return
+	}
 	store.journalRegion.Flush()
 }
 
@@ -603,13 +666,18 @@ func (store *Storage) journalSync() {
 }
 
 func (store *Storage) Close() {
-
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if !store.opened {
+		return
+	}
+	fmt.Printf("close")
+	store.opened = false
 	store.updateCapacityStopper.Stop() //will wait goroutine's end
 	store.journalSync()
 	store.innerNVM.Close()
-
+	store.index.Free()
+	store.alloc.Free()
 }
 
 func (store *Storage) RunSideJobOnce() {
@@ -617,6 +685,9 @@ func (store *Storage) RunSideJobOnce() {
 	defer store.i.Unlock()
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if store.opened == false {
+		return
+	}
 	store.journalRegion.RunSideJobOnce(store.index)
 }
 
@@ -625,7 +696,9 @@ func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPor
 	//write a DeleteRange record into journal
 	store.i.Lock()
 	defer store.i.Unlock()
-
+	if !store.opened {
+		return internalerror.StorageClosed
+	}
 	store.jr.Lock()
 	err := store.journalRegion.RecordDeleteRange(store.index, start, end)
 	store.jr.Unlock()
@@ -651,6 +724,9 @@ func (store *Storage) DeleteRange(start lump.LumpId, end lump.LumpId, hasDataPor
 func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error) {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if store.opened == false {
+		return nil, internalerror.StorageClosed
+	}
 	p, err := store.index.Get(lumpid)
 	if err != nil {
 		return nil, err
@@ -663,19 +739,27 @@ func (store *Storage) GetRecord(lumpid lump.LumpId) (*portion.DataPortion, error
 	}
 }
 
+/*
 func (store *Storage) Has(lumpid lump.LumpId) bool {
 	store.i.RLock()
 	defer store.i.RUnlock()
+	if store.opened == false {
+		return false
+	}
 	_, err := store.index.Get(lumpid)
 	if err != nil {
 		return false
 	}
 	return true
 }
-
+*/
+/*
 func (store *Storage) DeleteRecord(lumpid lump.LumpId) error {
 	store.i.Lock()
 	defer store.i.Unlock()
+	if store.opened == false {
+		return internalerror.StorageClosed
+	}
 	store.jr.Lock()
 	defer store.jr.Unlock()
 
@@ -693,12 +777,16 @@ func (store *Storage) DeleteRecord(lumpid lump.LumpId) error {
 		return errors.Errorf("only support DataPortion")
 	}
 }
+*/
 
 func (store *Storage) WriteRecord(lumpid lump.LumpId, dataPortion portion.DataPortion) error {
 	store.i.Lock()
 	defer store.i.Unlock()
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	if store.opened == false {
+		return internalerror.StorageClosed
+	}
 	if err := store.journalRegion.RecordPut(store.index, lumpid, dataPortion); err != nil {
 		return err
 	}
