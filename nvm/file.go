@@ -29,7 +29,7 @@ func fileExists(path string) bool {
 	return !info.IsDir()
 }
 
-func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
+func CreateIfAbsent(path string, capacity uint64, directIO bool) (*FileNVM, error) {
 
 	if block.Min().IsAligned(capacity) == false {
 		return nil, internalerror.InvalidInput
@@ -47,7 +47,12 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 	var err error
 	flags = os.O_CREATE | os.O_RDWR
 
-	if f, err = openFileWithDirectIO(path, flags, 0755); err != nil {
+	if directIO {
+		f, err = openFileWithDirectIO(path, flags, 0755)
+	} else {
+		f, err = os.OpenFile(path, flags, 0755)
+	}
+	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open file %s\n", path)
 	}
 	/*
@@ -94,7 +99,7 @@ func CreateIfAbsent(path string, capacity uint64) (*FileNVM, error) {
 
 }
 
-func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
+func Open(path string, directIO bool) (nvm *FileNVM, header *StorageHeader, err error) {
 	var f, parsedFile *os.File
 
 	if !strings.HasSuffix(path, "lusf") {
@@ -115,7 +120,12 @@ func Open(path string) (nvm *FileNVM, header *StorageHeader, err error) {
 	//reopen the file
 	parsedFile.Close()
 
-	if f, err = openFileWithDirectIO(path, os.O_RDWR, 0755); err != nil {
+	if directIO {
+		f, err = openFileWithDirectIO(path, os.O_RDWR, 0755)
+	} else {
+		f, err = os.OpenFile(path, os.O_RDWR, 0755)
+	}
+	if err != nil {
 		return nil, nil, err
 	}
 

@@ -54,7 +54,7 @@ func TestBackingFileOpen(t *testing.T) {
 }
 
 func TestOpenSnapFile(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 
@@ -76,7 +76,7 @@ func TestOpenSnapFile(t *testing.T) {
 	snap_nvm.Close()
 
 	//reopen
-	nvm, _, err = Open("foo-test.lusf")
+	nvm, _, err = Open("foo-test.lusf", true)
 	assert.Nil(t, err)
 	snap_nvm, err = NewSnapshotNVM(nvm)
 	assert.Nil(t, err)
@@ -89,7 +89,7 @@ func TestOpenSnapFile(t *testing.T) {
 }
 
 func TestSimpleWriteSnapFile(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 	snap_nvm, err := NewSnapshotNVM(nvm)
@@ -140,7 +140,7 @@ func TestSimpleWriteSnapFile(t *testing.T) {
 }
 
 func TestOverWriteSnapFile(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 
@@ -196,7 +196,7 @@ func TestOverWriteSnapFile(t *testing.T) {
 }
 
 func TestOverWriteSnapFileReOpen(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 
@@ -209,7 +209,7 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 	nvm.Sync()
 	nvm.Close()
 
-	nvm, header, err := Open("foo-test.lusf")
+	nvm, header, err := Open("foo-test.lusf", true)
 	snapFile, err := NewSnapshotNVM(nvm)
 	assert.Nil(t, err)
 	journalNVM, dataNVM := header.SplitRegion(snapFile)
@@ -226,7 +226,7 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 	snapFile.Close()
 	//setup is done
 
-	nvm, header, err = Open("foo-test.lusf")
+	nvm, header, err = Open("foo-test.lusf", true)
 	assert.Nil(t, err)
 	snap_nvm, err := NewSnapshotNVM(nvm)
 
@@ -267,7 +267,7 @@ func TestOverWriteSnapFileReOpen(t *testing.T) {
 }
 
 func TestSnapfileBackup(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 
@@ -340,7 +340,7 @@ func TestSnapfileBackup(t *testing.T) {
 }
 
 func TestSnapDelete(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 
@@ -353,7 +353,7 @@ func TestSnapDelete(t *testing.T) {
 }
 
 func TestSnapNVMReadAtWriteAt(t *testing.T) {
-	file, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	file, err := CreateIfAbsent("foo-dio.lusf", 33<<20, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio.lusf")
 
@@ -371,7 +371,7 @@ func TestSnapNVMReadAtWriteAt(t *testing.T) {
 }
 
 func TestSnapThreadSafe(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10)) //10M + 4k
+	nvm, err := CreateIfAbsent("foo-test.lusf", (32<<20)*10+(4<<10), true) //10M + 4k
 	assert.Nil(t, err)
 	defer os.Remove("foo-test.lusf")
 

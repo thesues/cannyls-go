@@ -56,8 +56,8 @@ type StorageUsage struct {
 	//	CurrentFileSize uint64 `json:"currentfilesize"`
 }
 
-func OpenCannylsStorage(path string) (*Storage, error) {
-	file, header, err := nvm.Open(path)
+func OpenCannylsStorage(path string, directIO bool) (*Storage, error) {
+	file, header, err := nvm.Open(path, directIO)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +138,9 @@ func updateUsageInfo(store *Storage) {
 
 }
 
-func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (*Storage, error) {
+func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64, directIO bool) (*Storage, error) {
 
-	file, err := nvm.CreateIfAbsent(path, capacity)
+	file, err := nvm.CreateIfAbsent(path, capacity, directIO)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func CreateCannylsStorage(path string, capacity uint64, journal_ratio float64) (
 	}
 	snapNVM.Close()
 
-	return OpenCannylsStorage(path)
+	return OpenCannylsStorage(path, directIO)
 }
 
 func makeHeader(file nvm.NonVolatileMemory, journal_ratio float64) nvm.StorageHeader {

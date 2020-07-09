@@ -21,7 +21,7 @@ var _ = fmt.Print
 
 func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 	//10M
-	_, err := CreateCannylsStorage("test.lusf", 10<<20, 0.01)
+	_, err := CreateCannylsStorage("test.lusf", 10<<20, 0.01, true)
 	defer os.Remove("test.lusf")
 	assert.Nil(t, err)
 	assert.FileExists(t, "test.lusf")
@@ -29,7 +29,7 @@ func TestCreateCannylsStorageCreateOpen(t *testing.T) {
 
 func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 
-	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 
@@ -46,7 +46,7 @@ func TestCreateCannylsStorageDeleteReturnSize(t *testing.T) {
 }
 
 func TestStorage_GetSize(t *testing.T) {
-	storage, err := CreateCannylsStorage("tmpsize.lusf", 10<<20, 0.01)
+	storage, err := CreateCannylsStorage("tmpsize.lusf", 10<<20, 0.01, true)
 	assert.Nil(t, err)
 	defer storage.Close()
 	defer os.Remove("tmpsize.lusf")
@@ -78,7 +78,7 @@ func TestStorage_GetSize(t *testing.T) {
 func TestCreateCannylsStorageWork(t *testing.T) {
 	//10M
 	var size uint32
-	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 10<<20, 0.01, true)
 	defer os.Remove("tmp11.lusf")
 
 	assert.Nil(t, err)
@@ -144,7 +144,7 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 }
 
 func TestCreateCannylsStorageFull(t *testing.T) {
-	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.01)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.01, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 
@@ -167,7 +167,7 @@ func TestCreateCannylsStorageFull(t *testing.T) {
 
 func TestCreateCannylsStorageFullGC(t *testing.T) {
 
-	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.01)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.01, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 
@@ -204,7 +204,7 @@ func TestCreateCannylsStorageFullGC(t *testing.T) {
 
 //FIXME
 func TestCreateCannylsNoOverflow(t *testing.T) {
-	storage, err := CreateCannylsStorage("tmp11.lusf", 400*1024, 0.01)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 400*1024, 0.01, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 
@@ -244,7 +244,7 @@ func TestCreateCannylsNoOverflow(t *testing.T) {
 
 func TestStorageLoopForEver1024(t *testing.T) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8, true)
 	assert.Nil(t, err)
 	//storage, err := CreateCannylsStorage("tmp11.lusf", 10*1024, 0.8) test case
 	fmt.Printf("Journal Region Size is %d\n", storage.storageHeader.JournalRegionSize)
@@ -266,7 +266,7 @@ func TestStorageLoopForEver1024(t *testing.T) {
 //slow
 func TestStorageLoopForEver32(t *testing.T) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf", 32*1024, 0.8)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 32*1024, 0.8, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 	for i := 0; i < 50000; i++ {
@@ -301,7 +301,7 @@ func TestStorage_paddingWithZero(t *testing.T) {
 
 func TestStorage_Offset(t *testing.T) {
 	storage, err := CreateCannylsStorage("offset.lusf",
-		10<<20, 0.1)
+		10<<20, 0.1, true)
 	assert.Nil(t, err)
 	defer storage.Close()
 	defer os.Remove("offset.lusf")
@@ -355,7 +355,7 @@ func TestStorage_Offset(t *testing.T) {
 
 func BenchmarkStoragePutEmbeded(b *testing.B) {
 	var err error
-	storage, err := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.9)
+	storage, err := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.9, true)
 	if err != nil {
 		panic("failed to create bench.lusf")
 	}
@@ -370,7 +370,7 @@ func BenchmarkStoragePutEmbeded(b *testing.B) {
 }
 
 func BenchmarkStoragePutData(b *testing.B) {
-	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5, true)
 	defer os.Remove("bench.lusf")
 	for i := 0; i < b.N; i++ {
 		d := zeroedData(42)
@@ -428,7 +428,7 @@ func isDelete(entry journal.JournalEntry, id lump.LumpId) bool {
  */
 func TestMetricHttpSever(t *testing.T) {
 	//500K
-	storage, err := CreateCannylsStorage("tmp11.lusf", 500<<10, 0.5)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 500<<10, 0.5, true)
 	defer os.Remove("tmp11.lusf")
 
 	dummyData := make([]byte, 1024)
@@ -451,7 +451,7 @@ func TestMetricHttpSever(t *testing.T) {
 
 func storageRangeDelete(t *testing.T, reOpen bool, isEmbeded bool) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.8, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 	for i := 0; i < 100; i++ {
@@ -472,7 +472,7 @@ func storageRangeDelete(t *testing.T, reOpen bool, isEmbeded bool) {
 
 	if reOpen {
 		storage.Close()
-		storage, err = OpenCannylsStorage("tmp11.lusf")
+		storage, err = OpenCannylsStorage("tmp11.lusf", true)
 		assert.Nil(t, err)
 	}
 
@@ -519,7 +519,7 @@ func TestStorageRangeIter(t *testing.T) {
 */
 func TestStorageThreadSafe(t *testing.T) {
 	var err error
-	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.2)
+	storage, err := CreateCannylsStorage("tmp11.lusf", 1024*1024, 0.2, true)
 	assert.Nil(t, err)
 	defer os.Remove("tmp11.lusf")
 
@@ -572,7 +572,7 @@ func TestStorageThreadSafe(t *testing.T) {
 }
 
 func BenchmarkStoragePutDataMultiThread(b *testing.B) {
-	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5, true)
 	defer os.Remove("bench.lusf")
 	for i := 0; i < b.N; i++ {
 		stopper := util.NewStopper()
@@ -590,7 +590,7 @@ func BenchmarkStoragePutDataMultiThread(b *testing.B) {
 }
 
 func BenchmarkStoragePutDataSingleThread(b *testing.B) {
-	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5, true)
 	defer os.Remove("bench.lusf")
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < 100; j++ {
@@ -604,7 +604,7 @@ func BenchmarkStoragePutDataSingleThread(b *testing.B) {
 }
 
 func TestStorageCloseWriteRead(t *testing.T) {
-	storage, err := CreateCannylsStorage("test.lusf", 1024*1024*1024, 0.5)
+	storage, err := CreateCannylsStorage("test.lusf", 1024*1024*1024, 0.5, true)
 	assert.Nil(t, err)
 	defer os.Remove("test.lusf")
 	storage.Close()
@@ -618,7 +618,7 @@ func TestStorageCloseWriteRead(t *testing.T) {
 }
 
 func BenchmarkStoragGetDataSingleThread(b *testing.B) {
-	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5, true)
 	defer os.Remove("bench.lusf")
 	//setup data
 	for j := 0; j < 100; j++ {
@@ -637,7 +637,7 @@ func BenchmarkStoragGetDataSingleThread(b *testing.B) {
 }
 
 func BenchmarkStoragGetDataMultiThread(b *testing.B) {
-	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5)
+	storage, _ := CreateCannylsStorage("bench.lusf", 1024*1024*1024, 0.5, true)
 	defer os.Remove("bench.lusf")
 	//setup data
 	for j := 0; j < 100; j++ {

@@ -60,7 +60,7 @@ func BenchmarkNVM(b *testing.B) {
 	buf := alignedWithSize(512)
 	buf[511] = 10
 	//create a new file
-	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024*1024)
+	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024*1024, true)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -82,14 +82,14 @@ func BenchmarkNVM(b *testing.B) {
 func TestFileNVMOpen(t *testing.T) {
 
 	//open an non-exist file
-	nvm, _, err := Open("foo-test.lusf")
+	nvm, _, err := Open("foo-test.lusf", true)
 	assert.Error(t, err)
 	assert.Nil(t, nvm)
 }
 
 func TestFileNVMReopen(t *testing.T) {
 	//create a new file
-	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024)
+	nvm, err := CreateIfAbsent("foo-test.lusf", 10*1024, true)
 	assert.Nil(t, err)
 
 	data := new(bytes.Buffer)
@@ -102,7 +102,7 @@ func TestFileNVMReopen(t *testing.T) {
 
 	defer os.Remove("foo-test.lusf")
 
-	nvm, _, err = Open("foo-test.lusf")
+	nvm, _, err = Open("foo-test.lusf", true)
 	fmt.Printf("%+v\n", err)
 	assert.Nil(t, err)
 
@@ -120,15 +120,15 @@ func TestFileNVMReopen(t *testing.T) {
 	assert.Nil(t, err)
 
 	//open the file will fail, because the exclusive lock
-	_, _, err = Open("foo-test.lusf")
+	_, _, err = Open("foo-test.lusf", true)
 	assert.Error(t, err)
 
-	_, err = CreateIfAbsent("foo-test.lusf", 1024*10)
+	_, err = CreateIfAbsent("foo-test.lusf", 1024*10, true)
 	assert.Error(t, err)
 
 	nvm.Close()
 
-	nvm, _, err = Open("foo-test.lusf")
+	nvm, _, err = Open("foo-test.lusf", true)
 	assert.Nil(t, err)
 
 	ab := block.NewAlignedBytes(headerSize+3, block.Min()).Align().AsBytes()
@@ -142,7 +142,7 @@ func TestFileNVMReopen(t *testing.T) {
 
 func TestFileNVMSimpleCreate(t *testing.T) {
 
-	nvm, err := CreateIfAbsent("foo.lusf", 10*1024)
+	nvm, err := CreateIfAbsent("foo.lusf", 10*1024, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo.lusf")
 
@@ -158,7 +158,7 @@ func TestFileNVMSimpleCreate(t *testing.T) {
 	_, err = os.Stat("foo.lusf")
 	assert.Nil(t, err)
 
-	nvm, _, err = Open("foo.lusf")
+	nvm, _, err = Open("foo.lusf", true)
 
 	assert.Nil(t, err)
 
@@ -169,7 +169,7 @@ func TestFileNVMSimpleCreate(t *testing.T) {
 }
 
 func TestFileNVMWrite(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo.lusf", 1024)
+	nvm, err := CreateIfAbsent("foo.lusf", 1024, true)
 	assert.Nil(t, err)
 	os.Remove("foo.lusf")
 
@@ -180,7 +180,7 @@ func TestFileNVMWrite(t *testing.T) {
 }
 
 func TestFileNVMOperations(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo.lusf", 1024)
+	nvm, err := CreateIfAbsent("foo.lusf", 1024, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo.lusf")
 
@@ -229,7 +229,7 @@ func TestFileNVMOperations(t *testing.T) {
 }
 
 func TestFileNVMDirectIO(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio.lusf", 1024)
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 1024, true)
 	defer os.Remove("foo-dio.lusf")
 
 	data := new(bytes.Buffer)
@@ -241,7 +241,7 @@ func TestFileNVMDirectIO(t *testing.T) {
 	nvm.Sync()
 	nvm.Close()
 	//
-	nvm, _, err = Open("foo-dio.lusf")
+	nvm, _, err = Open("foo-dio.lusf", true)
 	defer os.Remove("foo-dio.lusf")
 	assert.Nil(t, err)
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
@@ -251,7 +251,7 @@ func TestFileNVMDirectIO(t *testing.T) {
 }
 
 func TestFileNVMEXLock(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio.lusf", 1024)
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 1024, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio.lusf")
 
@@ -263,7 +263,7 @@ func TestFileNVMEXLock(t *testing.T) {
 	nvm.Sync()
 	nvm.Close()
 
-	nvm, _, err = Open("foo-dio.lusf")
+	nvm, _, err = Open("foo-dio.lusf", true)
 	assert.Nil(t, err)
 
 	flag, err := fcntl(int(nvm.file.Fd()), syscall.F_GETFL, 0)
@@ -275,7 +275,7 @@ func TestFileNVMEXLock(t *testing.T) {
 }
 
 func TestFileReadHole1(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio.lusf")
 	nvm.Seek(32<<20, io.SeekStart)
@@ -287,7 +287,7 @@ func TestFileReadHole1(t *testing.T) {
 }
 
 func TestFileReadHole2(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio.lusf")
 	nvm.Seek(0, io.SeekStart)
@@ -299,7 +299,7 @@ func TestFileReadHole2(t *testing.T) {
 }
 
 func TestFileReadAtWriteAt(t *testing.T) {
-	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20)
+	nvm, err := CreateIfAbsent("foo-dio.lusf", 33<<20, true)
 	assert.Nil(t, err)
 	defer os.Remove("foo-dio.lusf")
 	wbuf := alignedWithSize(512)
