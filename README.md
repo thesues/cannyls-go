@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/thesues/cannyls-go.svg?branch=master)](https://travis-ci.org/thesues/cannyls-go)
 [![codecov](https://codecov.io/gh/thesues/cannyls-go/branch/master/graph/badge.svg)](https://codecov.io/gh/thesues/cannyls-go)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fthesues%2Fcannyls-go.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fthesues%2Fcannyls-go?ref=badge_shield)
+[![Go Report Card](https://goreportcard.com/badge/github.com/thesues/cannyls-go)](https://goreportcard.com/report/github.com/thesues/cannyls-go)
 
 # Cannyls-go
 
