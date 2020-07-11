@@ -668,6 +668,8 @@ func (store *Storage) journalSync() {
 func (store *Storage) Close() {
 	store.jr.Lock()
 	defer store.jr.Unlock()
+	store.i.Lock()
+	defer store.i.Unlock()
 	if !store.opened {
 		return
 	}
