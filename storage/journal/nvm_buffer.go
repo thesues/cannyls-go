@@ -1,13 +1,16 @@
 package journal
 
 import (
+	"context"
 	"fmt"
 	"io"
 
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
+	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/util"
+	ostats "go.opencensus.io/stats"
 )
 
 var _ = fmt.Println
@@ -164,6 +167,7 @@ func (jb *JournalNvmBuffer) flushWriteBuffer() error {
 		return nil
 	}
 
+	ostats.Record(context.Background(), x.JournalRegionMetric.Flushs.M(1))
 	//fmt.Println("FLUSH DATA")
 	if _, err := jb.nvm.Seek(int64(jb.writeBufOffset), io.SeekStart); err != nil {
 		return err

@@ -421,15 +421,12 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 		return nil, err
 	}
 
-	ostats.Record(context.Background(), x.StorageMetric.Reads.M(1))
-
 	switch v := p.(type) {
 	case portion.DataPortion:
 		lumpdata, err := store.dataRegion.Get(v)
 		if err != nil {
 			return nil, err
 		}
-		ostats.Record(context.Background(), x.StorageMetric.ReadBytes.M(int64(lumpdata.Inner.Len())))
 		return lumpdata.AsBytes(), nil
 	case portion.JournalPortion:
 		store.jr.Lock()
@@ -438,7 +435,6 @@ func (store *Storage) Get(lumpid lump.LumpId) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		ostats.Record(context.Background(), x.StorageMetric.ReadBytes.M(int64(len(data))))
 		return data, nil
 	default:
 		panic("never here")
@@ -494,12 +490,10 @@ func (store *Storage) put(lumpid lump.LumpId, lumpdata lump.LumpData) (err error
 
 	store.index.InsertDataPortion(lumpid, dataPortion)
 
-	ostats.Record(context.Background(), x.StorageMetric.Writes.M(1))
 	if int64(lumpdata.Inner.Len()) == 1 {
 
 		panic("FUCK")
 	}
-	ostats.Record(context.Background(), x.StorageMetric.WriteBytes.M(int64(lumpdata.Inner.Len())))
 	return
 }
 
@@ -541,9 +535,6 @@ func (store *Storage) PutWithOffset(lumpid lump.LumpId, lumpdata lump.LumpData,
 	p, err := store.index.Get(lumpid)
 	store.i.RUnlock()
 	payload := lumpdata.AsBytes()
-
-	ostats.Record(context.Background(), x.StorageMetric.Writes.M(1))
-	ostats.Record(context.Background(), x.StorageMetric.WriteBytes.M(int64(lumpdata.Inner.Len())))
 
 	if err != nil {
 		// Only one error possible, which is "object could not be found",

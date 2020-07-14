@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -8,10 +9,12 @@ import (
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/internalerror"
 	"github.com/thesues/cannyls-go/lump"
+	x "github.com/thesues/cannyls-go/metrics"
 	"github.com/thesues/cannyls-go/nvm"
 	"github.com/thesues/cannyls-go/portion"
 	"github.com/thesues/cannyls-go/storage/allocator"
 	"github.com/thesues/cannyls-go/util"
+	ostats "go.opencensus.io/stats"
 )
 
 const (
@@ -95,6 +98,9 @@ func (region *DataRegion) Put(data lump.LumpData) (portion.DataPortion, error) {
 	*/
 	_, err = region.nvm.WriteAt(data.Inner.AsBytes(), int64(offset))
 
+	ostats.Record(context.Background(), x.DataRegionMetric.WriteBytes.M(int64(data.Inner.Len())))
+	ostats.Record(context.Background(), x.DataRegionMetric.Writes.M(1))
+
 	return data_portion, err
 }
 
@@ -157,6 +163,8 @@ func (region *DataRegion) Update(dataPortion portion.DataPortion,
 		_, err = region.nvm.Write(data)
 	*/
 	region.nvm.WriteAt(data, int64(readOffset))
+	ostats.Record(context.Background(), x.DataRegionMetric.WriteBytes.M(int64(len(data))))
+	ostats.Record(context.Background(), x.DataRegionMetric.Writes.M(1))
 	return err
 }
 
@@ -191,6 +199,9 @@ func (region *DataRegion) GetSize(dataPortion portion.DataPortion) (size uint32,
 	paddingSize := uint32(util.GetUINT16(buf[region.block_size-2:]))
 	size = uint32(dataPortion.Len)*uint32(region.block_size) -
 		paddingSize - LUMP_DATA_TRAILER_SIZE
+
+	ostats.Record(context.Background(), x.DataRegionMetric.WriteBytes.M(int64(region.block_size)))
+	ostats.Record(context.Background(), x.DataRegionMetric.Writes.M(1))
 	return size, nil
 }
 
@@ -217,6 +228,10 @@ func (region *DataRegion) Get(dataPortion portion.DataPortion) (lump.LumpData, e
 	paddingSize := uint32(util.GetUINT16(ab.AsBytes()[ab.Len()-2:]))
 
 	ab.Resize(ab.Len() - paddingSize - LUMP_DATA_TRAILER_SIZE)
+
+	ostats.Record(context.Background(), x.DataRegionMetric.ReadBytes.M(int64(ab.Len())))
+	ostats.Record(context.Background(), x.DataRegionMetric.Reads.M(1))
+
 	return lump.NewLumpDataWithAb(ab), nil
 }
 
@@ -253,5 +268,8 @@ func (region *DataRegion) GetWithOffset(dataPortion portion.DataPortion,
 		return nil, errors.Wrap(internalerror.InvalidInput,
 			"startOffset > object length")
 	}
+
+	ostats.Record(context.Background(), x.DataRegionMetric.ReadBytes.M(int64(len(data))))
+	ostats.Record(context.Background(), x.DataRegionMetric.Reads.M(1))
 	return data[prefixPadding:realFileSize], nil
 }

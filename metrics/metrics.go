@@ -23,30 +23,31 @@ var (
 	//Metrics  for JournalRegion
 	JournalRegionMetric = newJournalRegionMetric()
 	//Metrics for Storage
-	StorageMetric     = newStorageMetric()
+	DataRegionMetric  = newDataRegionMetric()
 	PrometheusHandler *prometheus.Exporter
 )
 
 type journalRegionMetric struct {
+	Flushs       *stats.Int64Measure `aggr:"Counter"`
 	Syncs        *stats.Int64Measure `aggr:"Counter"`
 	GcQueueSize  *stats.Int64Measure `aggr:"LastValue"`
 	RecordCounts *stats.Int64Measure `aggr:"Sum"`
 	Capacity     *stats.Int64Measure `aggr:"LastValue""`
 }
 
-type storageMetric struct {
+type dataRegionMetric struct {
 	Reads      *stats.Int64Measure `aggr:"Counter"`
 	Writes     *stats.Int64Measure `aggr:"Counter"`
 	ReadBytes  *stats.Int64Measure `aggr:"Sum"`
 	WriteBytes *stats.Int64Measure `aggr:"Sum"`
 }
 
-func newStorageMetric() *storageMetric {
-	return &storageMetric{
-		Reads:      stats.Int64("Reads", "reads", stats.UnitDimensionless),
-		Writes:     stats.Int64("Writes", "writes", stats.UnitDimensionless),
-		ReadBytes:  stats.Int64("ReadBytes", "read bytes", stats.UnitBytes),
-		WriteBytes: stats.Int64("WriteBytes", "write bytes", stats.UnitBytes),
+func newDataRegionMetric() *dataRegionMetric {
+	return &dataRegionMetric{
+		Reads:      stats.Int64("Reads", "data region  reads", stats.UnitDimensionless),
+		Writes:     stats.Int64("Writes", "data writes", stats.UnitDimensionless),
+		ReadBytes:  stats.Int64("ReadBytes", "data region read bytes", stats.UnitBytes),
+		WriteBytes: stats.Int64("WriteBytes", "data region write bytes", stats.UnitBytes),
 	}
 
 }
@@ -56,6 +57,7 @@ func newJournalRegionMetric() *journalRegionMetric {
 		GcQueueSize:  stats.Int64("GcQueueSize", "how many records have be put in gcqueue", "1"),
 		RecordCounts: stats.Int64("Records in journal", "records put in the journal region since start", "1"),
 		Capacity:     stats.Int64("JournalUsage", "The usage of JournalRegion, by bytes", "byte"),
+		Flushs:       stats.Int64("JouralFlushs", "how many time Journal flushs", "1"),
 	}
 }
 
@@ -95,7 +97,7 @@ func init() {
 	var err error
 	viewList := make([]*view.View, 0)
 	viewList = createAppendViews(JournalRegionMetric, viewList)
-	viewList = createAppendViews(StorageMetric, viewList)
+	viewList = createAppendViews(DataRegionMetric, viewList)
 
 	if err := view.Register(viewList...); err != nil {
 		panic("failed to register view")
