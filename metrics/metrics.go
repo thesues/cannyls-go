@@ -22,7 +22,9 @@ var (
 	//This is the key indicate each record's tag
 	//Metrics  for JournalRegion
 	JournalRegionMetric = newJournalRegionMetric()
-	PrometheusHandler   *prometheus.Exporter
+	//Metrics for Storage
+	StorageMetric     = newStorageMetric()
+	PrometheusHandler *prometheus.Exporter
 )
 
 type journalRegionMetric struct {
@@ -32,6 +34,22 @@ type journalRegionMetric struct {
 	Capacity     *stats.Int64Measure `aggr:"LastValue""`
 }
 
+type storageMetric struct {
+	Reads      *stats.Int64Measure `aggr:"Counter"`
+	Writes     *stats.Int64Measure `aggr:"Counter"`
+	ReadBytes  *stats.Int64Measure `aggr:"Sum"`
+	WriteBytes *stats.Int64Measure `aggr:"Sum"`
+}
+
+func newStorageMetric() *storageMetric {
+	return &storageMetric{
+		Reads:      stats.Int64("Reads", "reads", stats.UnitDimensionless),
+		Writes:     stats.Int64("Writes", "writes", stats.UnitDimensionless),
+		ReadBytes:  stats.Int64("ReadBytes", "read bytes", stats.UnitBytes),
+		WriteBytes: stats.Int64("WriteBytes", "write bytes", stats.UnitBytes),
+	}
+
+}
 func newJournalRegionMetric() *journalRegionMetric {
 	return &journalRegionMetric{
 		Syncs:        stats.Int64("JournalSync", "how many time Journal syncs", "1"),
@@ -74,11 +92,10 @@ func createAppendViews(m interface{}, list []*view.View) []*view.View {
 }
 
 func init() {
-
-	JournalRegionMetric = newJournalRegionMetric()
 	var err error
 	viewList := make([]*view.View, 0)
 	viewList = createAppendViews(JournalRegionMetric, viewList)
+	viewList = createAppendViews(StorageMetric, viewList)
 
 	if err := view.Register(viewList...); err != nil {
 		panic("failed to register view")
@@ -93,7 +110,4 @@ func init() {
 	}
 
 	view.RegisterExporter(PrometheusHandler)
-}
-
-type DataRegionMetric struct {
 }

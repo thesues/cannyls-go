@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/gin-gonic/gin"
 	"go.opencensus.io/trace"
 
@@ -436,16 +435,19 @@ func main() {
 		cli.StringFlag{Name: "storage"},
 	}
 
-	je, err := jaeger.NewExporter(jaeger.Options{
-		Endpoint:    "http://localhost:14268",
-		ServiceName: "readup",
-	})
-	trace.RegisterExporter(je)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	/*
+			je, err := jaeger.NewExporter(jaeger.Options{
+				Endpoint:    "http://localhost:14268",
+				ServiceName: "readup",
+			})
+			trace.RegisterExporter(je)
 
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create the Jaeger exporter: %+v", err))
-	}
+		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+
+		if err != nil {
+			panic(fmt.Sprintf("Failed to create the Jaeger exporter: %+v", err))
+		}
+	*/
 	app.Action = func(c *cli.Context) {
 		storagePath := c.String("storage")
 		store, err := storage.OpenCannylsStorage(storagePath)
@@ -456,7 +458,7 @@ func main() {
 		ServeStore(store)
 	}
 
-	err = app.Run(os.Args)
+	err := app.Run(os.Args)
 	if err != nil {
 		fmt.Println(err)
 	}
