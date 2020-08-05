@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 
-	"errors"
 	"io"
 	"os"
 	"strings"
@@ -12,6 +12,7 @@ import (
 	"math/rand"
 
 	"github.com/dustin/go-humanize"
+	"github.com/pkg/errors"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/nvm"
@@ -50,6 +51,38 @@ func printUsage(usage storage.StorageUsage) {
 	fmt.Printf("journal capacity %s \n", humanize.Bytes(usage.JournalCapacity))
 	fmt.Printf("journal Usage Bytes %s \n", humanize.Bytes(usage.JournalUsageBytes))
 
+}
+
+func expandDataRegionSize(c *cli.Context) (err error) {
+	path := c.String("storage")
+	paramSize := c.Uint64("size")
+	fileNVM, header, err := nvm.Open(path)
+	if err != nil {
+		return err
+	}
+	defer fileNVM.Close()
+	newSize := fileNVM.BlockSize().FloorAlign(paramSize)
+	if newSize <= header.DataRegionSize {
+		return errors.Errorf("new Size %d is smaller than current size %d", newSize, header.DataRegionSize)
+	}
+	fmt.Printf("setting new size to %d\n", newSize)
+	header.DataRegionSize = newSize
+
+	headBuf := new(bytes.Buffer)
+	if err = header.WriteHeaderRegionTo(headBuf); err != nil {
+		return err
+	}
+
+	alignedBufHead := block.FromBytes(headBuf.Bytes(), fileNVM.BlockSize())
+	alignedBufHead.Align()
+	//now headBuf's len should be at least 512
+	if _, err = fileNVM.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	if _, err = fileNVM.Write(alignedBufHead.AsBytes()); err != nil {
+		return err
+	}
+	return nil
 }
 
 func headerCannyls(c *cli.Context) (err error) {
@@ -151,11 +184,13 @@ func journalCannyls(c *cli.Context) (err error) {
 }
 
 func wbenchCannyls(c *cli.Context) (err error) {
-	return benchCannyls(c, false)
+	return benchCannyls(c, 1, false)
 }
 
+// I will delete keys when inserting, so 0.8 means we
+// do not need so much capacity
 func wrbenchCannyls(c *cli.Context) (err error) {
-	return benchCannyls(c, true)
+	return benchCannyls(c, 0.8, true)
 }
 
 /*
@@ -165,7 +200,7 @@ takes 61GB
 throughput :40 + 60 MB/s
 iops :9K
 */
-func benchCannyls(c *cli.Context, read bool) (err error) {
+func benchCannyls(c *cli.Context, ratio float64, read bool) (err error) {
 
 	count := c.Uint64("count")
 	size := c.Uint64("size")
@@ -176,7 +211,7 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 	if count == 0 || size == 0 {
 		return errors.New("argu count or size is zero")
 	}
-	store, err := createCannylsForBench(c)
+	store, err := createCannylsForBench(c, ratio)
 	if err != nil {
 		return
 	}
@@ -227,13 +262,13 @@ func benchCannyls(c *cli.Context, read bool) (err error) {
 	return
 }
 
-func createCannylsForBench(c *cli.Context) (store *storage.Storage, err error) {
+func createCannylsForBench(c *cli.Context, ratio float64) (store *storage.Storage, err error) {
 
 	size := c.Uint64("size")
 	count := c.Uint64("count")
 	path := c.String("storage")
 
-	capacityBytes := block.Min().CeilAlign(size * count * 8 / 10)
+	capacityBytes := block.Min().CeilAlign(uint64(float64(size*count) * ratio))
 
 	fmt.Printf("create cannyls... capacity is %s\n", bytesToString(capacityBytes))
 	store, err = storage.CreateCannylsStorage(path, capacityBytes, 0.1)
@@ -396,7 +431,7 @@ func main() {
 			Usage: "Header --storage path --replay <true> ",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "storage"},
-				cli.BoolTFlag{Name: "replay"},
+				cli.BoolFlag{Name: "replay"},
 			},
 			Action: headerCannyls,
 		},
@@ -423,6 +458,15 @@ func main() {
 				cli.BoolTFlag{Name: "sync"},
 			},
 			Action: wrbenchCannyls,
+		},
+		{
+			Name:  "Resize",
+			Usage: "Resize --storage <path> --size <size>",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "storage"},
+				cli.StringFlag{Name: "size"},
+			},
+			Action: expandDataRegionSize,
 		},
 	}
 	err := app.Run(os.Args)
