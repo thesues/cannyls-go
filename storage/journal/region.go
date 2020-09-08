@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	GC_COUNT_IN_SIDE_JOB = 64
+	//GC_COUNT_IN_SIDE_JOB = 64
 	//performance related
 	GC_QUEUE_SIZE = 0x2000
 	SYNC_INTERVAL = 0x2000
@@ -332,13 +332,13 @@ func (journal *JournalRegion) RecordDeleteRange(index *lumpindex.LumpIndex, star
 	return journal.appendWithGC(index, record)
 }
 
-func (journal *JournalRegion) RunSideJobOnce(index *lumpindex.LumpIndex) {
+func (journal *JournalRegion) RunSideJobOnce(index *lumpindex.LumpIndex, countSideJob int) {
 	if journal.gcQueue.Len() == 0 {
 		journal.fillGCQueue()
 	} else if journal.syncCountDown != SYNC_INTERVAL {
 		journal.Sync()
 	} else {
-		for i := 0; i < GC_COUNT_IN_SIDE_JOB; i++ {
+		for i := 0; i < countSideJob; i++ {
 			journal.gcOnce(index)
 		}
 		journal.trySync()

@@ -180,7 +180,7 @@ func ServeStore(store *storage.Storage) {
 				}
 
 			case <-time.After(3 * time.Second):
-				store.RunSideJobOnce()
+				store.RunSideJobOnce(64)
 			}
 		}
 	})

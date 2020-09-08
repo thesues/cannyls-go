@@ -35,7 +35,7 @@ const (
 
 type Storage struct {
 	i                     sync.RWMutex
-	jr                    sync.Mutex
+	jr                    sync.Mutex //protect journal region(read/write)
 	storageHeader         *nvm.StorageHeader
 	dataRegion            *DataRegion
 	journalRegion         *journal.JournalRegion
@@ -688,7 +688,7 @@ func (store *Storage) Close() {
 	store.alloc.Free()
 }
 
-func (store *Storage) RunSideJobOnce() {
+func (store *Storage) RunSideJobOnce(countSideJob int) {
 	store.i.Lock()
 	defer store.i.Unlock()
 	store.jr.Lock()
@@ -696,7 +696,7 @@ func (store *Storage) RunSideJobOnce() {
 	if store.opened == false {
 		return
 	}
-	store.journalRegion.RunSideJobOnce(store.index)
+	store.journalRegion.RunSideJobOnce(store.index, countSideJob)
 }
 
 //half open range: [start, end)

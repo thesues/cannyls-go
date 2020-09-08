@@ -120,7 +120,7 @@ func TestCreateCannylsStorageWork(t *testing.T) {
 	storage.PutEmbed(lumpid("11"), []byte("world"))
 
 	for i := 0; i < 10; i++ {
-		storage.RunSideJobOnce()
+		storage.RunSideJobOnce(64)
 		_, err = storage.PutEmbed(lumpid("22"), []byte("quux"))
 		assert.Nil(t, err)
 		storage.Delete(lumpid("22"))
