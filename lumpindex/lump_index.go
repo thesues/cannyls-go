@@ -32,7 +32,7 @@ func NewIndex() *LumpIndex {
 func (index *LumpIndex) Get(id lump.LumpId) (p portion.Portion, err error) {
 	v, ok := index.tree.Get(id.U64())
 	if ok == false {
-		return nil, errors.Wrapf(internalerror.InvalidInput, "failed to get key :%s", id.String())
+		return nil, internalerror.InvalidInput
 	}
 
 	p, _ = fromValueToPortion(v)
