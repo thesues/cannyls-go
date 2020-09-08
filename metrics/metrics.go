@@ -33,6 +33,7 @@ type journalRegionMetric struct {
 	GcQueueSize  *stats.Int64Measure `aggr:"LastValue"`
 	RecordCounts *stats.Int64Measure `aggr:"Sum"`
 	Capacity     *stats.Int64Measure `aggr:"LastValue""`
+	Reads        *stats.Int64Measure `aggr:"Counter"`
 }
 
 type dataRegionMetric struct {
@@ -58,6 +59,7 @@ func newJournalRegionMetric() *journalRegionMetric {
 		RecordCounts: stats.Int64("Records in journal", "records put in the journal region since start", "1"),
 		Capacity:     stats.Int64("JournalUsage", "The usage of JournalRegion, by bytes", "byte"),
 		Flushs:       stats.Int64("JouralFlushs", "how many time Journal flushs", "1"),
+		Reads:        stats.Int64("Reads", "journal region  reads", stats.UnitDimensionless),
 	}
 }
 
@@ -104,7 +106,7 @@ func init() {
 	}
 
 	PrometheusHandler, err = prometheus.NewExporter(prometheus.Options{
-		Namespace: "cannyls_go",
+		Namespace: "cannyls",
 		OnError:   func(err error) { fmt.Printf("%v\n", err) },
 	})
 	if err != nil {

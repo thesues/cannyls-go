@@ -81,6 +81,7 @@ func (jb *JournalNvmBuffer) Read(buf []byte) (n int, err error) {
 	readBufEnd := jb.nvm.BlockSize().CeilAlign(jb.position + uint64(len(buf)))
 	jb.readBuf.AlignResize(uint32(readBufEnd - readBufStart))
 
+	x.JournalRegionMetric.Reads.M(1)
 	//fmt.Printf("len: ", jb.readBuf.Len())
 	//Seek the aligned sector and read from disk
 	if _, err := jb.nvm.Seek(int64(readBufStart), io.SeekStart); err != nil {
