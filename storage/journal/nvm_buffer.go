@@ -119,7 +119,15 @@ func (jb *JournalNvmBuffer) Write(buf []byte) (n int, err error) {
 		//fmt.Println("here1")
 		start := jb.position - writeBufStart
 		end := uint32(start) + uint32(len(buf))
+
+		oldLen := uint64(jb.writeBuf.Len())
 		jb.writeBuf.AlignResize(end)
+
+		if uint64(jb.writeBuf.Len()) - oldLen >= uint64(jb.nvm.BlockSize().AsU16()) {
+			jb.nvm.Seek(int64(jb.writeBufOffset+oldLen), io.SeekStart)
+			jb.nvm.Read(jb.writeBuf.AsBytes()[oldLen:])
+		}
+
 		copy(jb.writeBuf.AsBytes()[start:end], buf)
 		jb.position += uint64(len(buf))
 		jb.maybeDirty = true

@@ -170,8 +170,8 @@ func ServeStore(store *storage.Storage) {
 					spans = append(spans, span)
 				}
 
-				store.Flush()
-				//store.Sync()
+				//store.Flush()
+				store.Sync()
 				for i := range spans {
 					spans[i].End()
 				}

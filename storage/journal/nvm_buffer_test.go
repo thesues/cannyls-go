@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/thesues/cannyls-go/nvm"
 	"io"
 	"os"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/thesues/cannyls-go/nvm"
 )
 
 var _ = fmt.Printf
@@ -55,6 +56,7 @@ func TestJournalNvmBufferSeekFlush2(t *testing.T) {
 	defer f.Close()
 	buffer := NewJournalNvmBuffer(f)
 
+	buffer.Seek(0, io.SeekStart)
 	buffer.Write([]byte("foo"))
 	buffer.Seek(512, io.SeekStart)
 	buffer.Write([]byte("bar"))
@@ -118,7 +120,6 @@ func TestJournalNvmBufferAutoFlush1(t *testing.T) {
 
 }
 
-
 func TestJournalNvmBufferOverwrite(t *testing.T) {
 	f := newMemNVM()
 	defer f.Close()
@@ -157,4 +158,24 @@ func newSliceWithValue(size int, initial byte) []byte {
 		n[i] = initial
 	}
 	return n
+}
+
+func TestJournalNvmBufferSeekBUG(t *testing.T) {
+	f := newMemNVM()
+	defer f.Close()
+	buffer := NewJournalNvmBuffer(f)
+
+	buffer.Seek(512, io.SeekStart)
+	buffer.Write([]byte("bar"))
+
+	buffer.Seek(0, io.SeekStart)
+	x := make([]byte, 513)
+	copy(x, "foo")
+	x[512] = 'z'
+	buffer.Write(x)
+
+	buffer.Flush()
+	assert.Equal(t, []byte("foo"), f.AsBytes()[0:3])
+	assert.Equal(t, []byte("zar"), f.AsBytes()[512:515])
+
 }
